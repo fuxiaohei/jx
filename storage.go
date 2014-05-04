@@ -51,7 +51,13 @@ func (s *Storage) Insert(a interface{}) (int, error) {
 	return table.Insert(a)
 }
 
-func (s *Storage) Get(a interface {},index ...string)error{
+// Get data by struct.
+// If not set index, get data by struck pk field value. If pk < 1, return nil.
+// If got, the data will assign to data struct.
+// If set index, it will find in id slices of index.
+// If result is a dataSet, assign the one whose pk is max.
+// Remember the empty string value of index is valid !
+func (s *Storage) Get(a interface{}, index ...string) error {
 	// check struct type
 	err := checkStructType(a, s)
 	if err != nil {
@@ -67,7 +73,7 @@ func (s *Storage) Get(a interface {},index ...string)error{
 	return nil
 }
 
-func (s *Storage) Update(a interface {})error{
+func (s *Storage) Update(a interface{}) error {
 	// check struct type
 	err := checkStructType(a, s)
 	if err != nil {

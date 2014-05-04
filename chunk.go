@@ -32,7 +32,7 @@ func (c *Chunk) Insert(data interface{}, id int) error {
 
 func (c *Chunk) moveWriteNext() {
 	c.writeCursorInt++
-	c.writeCursor = "dat"+strconv.Itoa(c.writeCursorInt)
+	c.writeCursor = "dat" + strconv.Itoa(c.writeCursorInt)
 	if len(c.rawData[c.writeCursor]) < 1 {
 		c.rawData[c.writeCursor] = make(map[string]interface{})
 	}
@@ -53,12 +53,16 @@ func (c *Chunk) getInChunk(name string, id int) interface{} {
 	return c.rawData[name][key]
 }
 
+// Get chunk by pk id.
+// It reads all memory data first. If found, return interface value.
+// If not found, move reader cursor to prev one, load proper chunk to memory.
+// Then find it in the last-loaded chunk data.
 func (c *Chunk) Get(id int) interface{} {
 	value := c.getInAll(id)
 	if value == nil {
-		if (c.moveReadPrev()) {
+		if c.moveReadPrev() {
 			return c.Get(id)
-		}else {
+		} else {
 			return nil
 		}
 	}
@@ -70,7 +74,7 @@ func (c *Chunk) moveReadPrev() bool {
 	if c.readCursorInt < 1 {
 		return false
 	}
-	c.readCursor = "dat"+strconv.Itoa(c.readCursorInt)
+	c.readCursor = "dat" + strconv.Itoa(c.readCursorInt)
 	if len(c.rawData[c.readCursor]) < 1 {
 		c.rawData[c.readCursor] = make(map[string]interface{})
 		file := path.Join(c.s.dir, c.name+"."+c.readCursor)
@@ -125,7 +129,7 @@ func NewReadChunk(t *Table, s *Storage) (*Chunk, error) {
 	}
 	i--
 	c.writeCursorInt = i
-	c.writeCursor = "dat"+strconv.Itoa(i)
+	c.writeCursor = "dat" + strconv.Itoa(i)
 	c.readCursorInt = i
 	c.readCursor = c.writeCursor
 
