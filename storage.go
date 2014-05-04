@@ -51,6 +51,22 @@ func (s *Storage) Insert(a interface{}) (int, error) {
 	return table.Insert(a)
 }
 
+func (s *Storage) Get(a interface {},index ...string)error{
+	// check struct type
+	err := checkStructType(a, s)
+	if err != nil {
+		return err
+	}
+	// get table
+	table, err := getTable(a, s)
+	if err != nil {
+		return err
+	}
+
+	table.GetByPK(a)
+	return nil
+}
+
 func (s *Storage) Update(a interface {})error{
 	// check struct type
 	err := checkStructType(a, s)

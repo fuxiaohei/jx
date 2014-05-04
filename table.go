@@ -81,8 +81,38 @@ func (t *Table) Insert(a interface{}) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	setStructPKInt(a, t.Schema.PK, t.Schema.MaxId)
 
 	return t.Schema.MaxId, nil
+}
+
+func (t *Table) GetByPK(a interface{}) error {
+	// struct to map
+	dataMap, err := struct2map(a)
+	if err != nil {
+		return err
+	}
+
+	// get pk int slice
+	ids := t.Index[t.Schema.PK].PK
+	if len(ids) < 1 {
+		return nil
+	}
+
+	// check pk exist
+	pk := int(dataMap[t.Schema.PK].(float64))
+	if !inIntSlice(ids, pk) {
+		return nil
+	}
+	value := t.Chunk.Get(pk)
+	valueMap, ok := value.(map[string]interface{})
+	if ok {
+		err = map2struct(valueMap, a)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func createSchema(rt reflect.Type, t *Table, s *Storage) error {

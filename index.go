@@ -34,6 +34,9 @@ func (i *Index) updateKeys() {
 	}
 }
 
+// Insert pk int to index.
+// The value is index field value.
+// If insert pk int, the value is ignored.
 func (i *Index) Insert(value string, id int) {
 	if i.Type == INDEX_INT {
 		if _, ok := i.IntData[value]; !ok {

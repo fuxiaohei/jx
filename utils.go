@@ -9,6 +9,16 @@ import (
 	"reflect"
 )
 
+func setStructPKInt(a interface{}, name string, id int) {
+	fmt.Println("set pk",a)
+	rv := reflect.ValueOf(a)
+	field := rv.Elem().FieldByName(name)
+	if !field.CanSet() {
+		return
+	}
+	field.SetInt(int64(id))
+}
+
 func getStructPointer(data interface{}) (reflect.Type, error) {
 	rt := reflect.TypeOf(data)
 	if rt.Kind() == reflect.Ptr && rt.Elem().Kind() == reflect.Struct {
@@ -76,4 +86,13 @@ func map2struct(tmp map[string]interface{}, data interface{}) error {
 		return err
 	}
 	return json.Unmarshal(jsonBytes, data)
+}
+
+func inIntSlice(s []int,i int)bool{
+	for _,j := range s{
+		if i == j{
+			return true
+		}
+	}
+	return false
 }

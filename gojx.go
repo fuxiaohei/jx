@@ -22,6 +22,8 @@ var (
 
 	ErrInsertNoType  = "insert unregistered type '%s'"
 	ErrInsertNoTable = "insert no-table type '%s'"
+
+	ErrGetPKMissing = "get non-exist data of pk '%d'"
 )
 
 

@@ -33,7 +33,53 @@ func (c *Chunk) Insert(data interface{}, id int) error {
 func (c *Chunk) moveWriteNext() {
 	c.writeCursorInt++
 	c.writeCursor = "dat"+strconv.Itoa(c.writeCursorInt)
-	c.rawData[c.writeCursor] = make(map[string]interface{})
+	if len(c.rawData[c.writeCursor]) < 1 {
+		c.rawData[c.writeCursor] = make(map[string]interface{})
+	}
+}
+
+func (c *Chunk) getInAll(id int) interface{} {
+	for name, _ := range c.rawData {
+		value := c.getInChunk(name, id)
+		if value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
+func (c *Chunk) getInChunk(name string, id int) interface{} {
+	key := c.name + "-" + strconv.Itoa(id)
+	return c.rawData[name][key]
+}
+
+func (c *Chunk) Get(id int) interface{} {
+	value := c.getInAll(id)
+	if value == nil {
+		if (c.moveReadPrev()) {
+			return c.Get(id)
+		}else {
+			return nil
+		}
+	}
+	return value
+}
+
+func (c *Chunk) moveReadPrev() bool {
+	c.readCursorInt--
+	if c.readCursorInt < 1 {
+		return false
+	}
+	c.readCursor = "dat"+strconv.Itoa(c.readCursorInt)
+	if len(c.rawData[c.readCursor]) < 1 {
+		c.rawData[c.readCursor] = make(map[string]interface{})
+		file := path.Join(c.s.dir, c.name+"."+c.readCursor)
+		tmp := make(map[string]interface{})
+		fromJsonFile(file, &tmp)
+		c.rawData[c.readCursor] = tmp
+		println("move chunk read cursor to " + c.name + "." + c.readCursor)
+	}
+	return true
 }
 
 // Create new chunk for table in storage.
@@ -93,5 +139,6 @@ func NewReadChunk(t *Table, s *Storage) (*Chunk, error) {
 		return nil, err
 	}
 	c.rawData[c.writeCursor] = tmp
+	println("read chunk cursor to " + c.name + "." + c.readCursor)
 	return c, nil
 }
