@@ -50,6 +50,10 @@ func (t *Table) Insert(a interface{}) (int, error) {
 
 	// insert index
 	for name, idx := range t.Index {
+		if idx.Type == INDEX_PK {
+			idx.Insert("", t.Schema.MaxId)
+			continue
+		}
 		if idx.Type == INDEX_INT {
 			value := strconv.Itoa(int(dataMap[name].(float64)))
 			idx.Insert(value, t.Schema.MaxId)
@@ -101,6 +105,7 @@ func createIndex(t *Table, s *Storage) error {
 	for _, idx := range t.Schema.IntIndex {
 		t.Index[idx] = NewIndex(idx, INDEX_INT)
 	}
+	t.Index[t.Schema.PK] = NewIndex(t.Schema.PK, INDEX_PK)
 	t.indexFile = path.Join(s.dir, t.Name+".idx")
 	return toJsonFile(t.indexFile, t.Index)
 }

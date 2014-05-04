@@ -7,10 +7,11 @@ import (
 type Index struct {
 	Name       string           `json:"name"`
 	Type       string           `json:"type"`
-	StringData map[string][]int `json:"string_dat"`
-	StringKeys []string         `json:"strings"`
-	IntData    map[string][]int `json:"int_dat"`
-	IntKeys    []int            `json:"ints"`
+	StringData map[string][]int `json:"string_dat,omitempty"`
+	StringKeys []string         `json:"strings,omitempty"`
+	IntData    map[string][]int `json:"int_dat,omitempty"`
+	IntKeys    []int            `json:"ints,omitempty"`
+	PK         []int            `json:"pk,omitempty"`
 }
 
 func (i *Index) updateKeys() {
@@ -52,12 +53,19 @@ func (i *Index) Insert(value string, id int) {
 		i.updateKeys()
 		return
 	}
+	if i.Type == INDEX_PK {
+		i.PK = append(i.PK, id)
+		return
+	}
 }
 
 // Create new index with name and type.
 // Index support int and string type.
 func NewIndex(name string, idxType string) *Index {
 	idx := &Index{Name: name, Type: idxType}
+	if idx.Type == INDEX_PK {
+		idx.PK = make([]int, 0)
+	}
 	if idx.Type == INDEX_INT {
 		idx.IntData = make(map[string][]int)
 		idx.IntKeys = make([]int, 0)

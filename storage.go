@@ -35,17 +35,34 @@ func (s *Storage) Register(a ...interface{}) error {
 }
 
 // Insert struct type.
+// More documentation in *Table.Insert().
 func (s *Storage) Insert(a interface{}) (int, error) {
 	// check struct type
 	err := checkStructType(a, s)
 	if err != nil {
 		return 0, err
 	}
+	// get table
 	table, err := getTable(a, s)
 	if err != nil {
 		return 0, err
 	}
+	// do table insert
 	return table.Insert(a)
+}
+
+func (s *Storage) Update(a interface {})error{
+	// check struct type
+	err := checkStructType(a, s)
+	if err != nil {
+		return err
+	}
+	// get table
+	_, err = getTable(a, s)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Create storage struct by directory name.

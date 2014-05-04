@@ -6,6 +6,7 @@ const (
 
 	INDEX_INT    = "INT"
 	INDEX_STRING = "STRING"
+	INDEX_PK     = "PK"
 
 	CHUNK_SIZE = 100
 
