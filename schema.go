@@ -35,7 +35,7 @@ func NewSchema(rt reflect.Type) (*Schema, error) {
 		StringIndex: make([]string, 0),
 		IntIndex:    make([]string, 0),
 		MaxId:       0,
-		ChunkSize:   100,
+		ChunkSize:   CHUNK_SIZE,
 	}
 	for i := 0; i < numField; i++ {
 		field := rt.Field(i)

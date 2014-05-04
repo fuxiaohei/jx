@@ -10,11 +10,12 @@ const (
 	INDEX_STRING = "STRING"
 	INDEX_PK     = "PK"
 
-	CHUNK_SIZE = 100
-
 )
 
 var (
+	CHUNK_SIZE = 100
+
+
 	ErrRegisterNeedStructPointer = "register type need struct pointer"
 
 	ErrSchemaNeedField      = "schema '%s' need field"
