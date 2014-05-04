@@ -74,8 +74,7 @@ func (s *Storage) Get(a interface{}, index ...string) error {
 		return table.GetByIndex(a,index)
 	}
 
-	table.GetByPK(a)
-	return nil
+	return table.GetByPK(a)
 }
 
 func (s *Storage) Update(a interface{}) error {

@@ -115,7 +115,7 @@ func (t *Table) GetByPK(a interface{}) error {
 
 func (t *Table) getInChunk(pk int, a interface{}) error {
 	// get from chunk
-	value := t.Chunk.Get(pk)
+	_, value := t.Chunk.Get(pk)
 	valueMap, ok := value.(map[string]interface{})
 	if ok {
 		// assign to struct
@@ -123,6 +123,7 @@ func (t *Table) getInChunk(pk int, a interface{}) error {
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 	return ErrorNoData
 }
@@ -154,15 +155,16 @@ func (t *Table) GetByIndex(a interface{}, index []string) error {
 
 		ids = mergeIntSliceUnique(ids, idSlice)
 	}
-
-	if len(ids) > 0 {
-		sortIntSliceDesc(ids)
-	}else {
+	if len(ids) < 1 {
 		return ErrorNoData
 	}
 
+	if len(ids) > 1 {
+		sortIntSliceDesc(ids)
+	}
+
 	// get max id one
-	return t.getInChunk(ids[0],a)
+	return t.getInChunk(ids[0], a)
 }
 
 func createSchema(rt reflect.Type, t *Table, s *Storage) error {
@@ -274,7 +276,7 @@ func (s *Storage) ReadTable(name string) (*Table, error) {
 func (s *Storage) CreateOrReadTable(rt reflect.Type) (*Table, error) {
 	table := &Table{Name: rt.Name(), s: s}
 	if table.IsExist() {
-		println("read table")
+		println("read table "+rt.Name())
 		return s.ReadTable(rt.Name())
 	}
 	return s.CreateTable(rt)

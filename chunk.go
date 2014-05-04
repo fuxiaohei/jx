@@ -32,20 +32,21 @@ func (c *Chunk) Insert(data interface{}, id int) error {
 
 func (c *Chunk) moveWriteNext() {
 	c.writeCursorInt++
-	c.writeCursor = "dat" + strconv.Itoa(c.writeCursorInt)
+	c.writeCursor = "dat"+strconv.Itoa(c.writeCursorInt)
 	if len(c.rawData[c.writeCursor]) < 1 {
 		c.rawData[c.writeCursor] = make(map[string]interface{})
 	}
+	println("move chunk write cursor to " + c.name + "." + c.writeCursor)
 }
 
-func (c *Chunk) getInAll(id int) interface{} {
+func (c *Chunk) getInAll(id int) (string, interface{}) {
 	for name, _ := range c.rawData {
 		value := c.getInChunk(name, id)
 		if value != nil {
-			return value
+			return name, value
 		}
 	}
-	return nil
+	return "", nil
 }
 
 func (c *Chunk) getInChunk(name string, id int) interface{} {
@@ -57,16 +58,16 @@ func (c *Chunk) getInChunk(name string, id int) interface{} {
 // It reads all memory data first. If found, return interface value.
 // If not found, move reader cursor to prev one, load proper chunk to memory.
 // Then find it in the last-loaded chunk data.
-func (c *Chunk) Get(id int) interface{} {
-	value := c.getInAll(id)
+func (c *Chunk) Get(id int) (string, interface{}) {
+	cursor, value := c.getInAll(id)
 	if value == nil {
 		if c.moveReadPrev() {
 			return c.Get(id)
 		} else {
-			return nil
+			return "", nil
 		}
 	}
-	return value
+	return cursor, value
 }
 
 func (c *Chunk) moveReadPrev() bool {
@@ -74,7 +75,7 @@ func (c *Chunk) moveReadPrev() bool {
 	if c.readCursorInt < 1 {
 		return false
 	}
-	c.readCursor = "dat" + strconv.Itoa(c.readCursorInt)
+	c.readCursor = "dat"+strconv.Itoa(c.readCursorInt)
 	if len(c.rawData[c.readCursor]) < 1 {
 		c.rawData[c.readCursor] = make(map[string]interface{})
 		file := path.Join(c.s.dir, c.name+"."+c.readCursor)
@@ -129,7 +130,7 @@ func NewReadChunk(t *Table, s *Storage) (*Chunk, error) {
 	}
 	i--
 	c.writeCursorInt = i
-	c.writeCursor = "dat" + strconv.Itoa(i)
+	c.writeCursor = "dat"+strconv.Itoa(i)
 	c.readCursorInt = i
 	c.readCursor = c.writeCursor
 
@@ -143,6 +144,7 @@ func NewReadChunk(t *Table, s *Storage) (*Chunk, error) {
 		return nil, err
 	}
 	c.rawData[c.writeCursor] = tmp
+	println("write chunk cursor to " + c.name + "." + c.writeCursor)
 	println("read chunk cursor to " + c.name + "." + c.readCursor)
 	return c, nil
 }
