@@ -62,6 +62,27 @@ func (i *Index) Insert(value string, id int) {
 	}
 }
 
+// Get id slice by value.
+// It checks index type itself.
+// So need string value for string index or int value for int index.
+func (i *Index) GetIds(value interface{}) []int {
+	if i.Type == INDEX_STRING {
+		str, ok := value.(string)
+		if !ok {
+			return []int{}
+		}
+		return i.StringData[str]
+	}
+	if i.Type == INDEX_INT {
+		it, ok := value.(int)
+		if !ok {
+			return []int{}
+		}
+		return i.IntData[strconv.Itoa(it)]
+	}
+	return []int{}
+}
+
 // Create new index with name and type.
 // Index support int and string type.
 func NewIndex(name string, idxType string) *Index {

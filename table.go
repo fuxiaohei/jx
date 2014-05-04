@@ -86,6 +86,9 @@ func (t *Table) Insert(a interface{}) (int, error) {
 	return t.Schema.MaxId, nil
 }
 
+// Get data by pk int.
+// If not in pk slice, return no-data.
+// If not in chunk, return no-data.
 func (t *Table) GetByPK(a interface{}) error {
 	// struct to map
 	dataMap, err := struct2map(a)
@@ -96,23 +99,70 @@ func (t *Table) GetByPK(a interface{}) error {
 	// get pk int slice
 	ids := t.Index[t.Schema.PK].PK
 	if len(ids) < 1 {
-		return nil
+		return ErrorNoData
 	}
 
 	// check pk exist
 	pk := int(dataMap[t.Schema.PK].(float64))
 	if !inIntSlice(ids, pk) {
-		return nil
+		return ErrorNoData
 	}
+
+	// get from chunk
+	return t.getInChunk(pk, a)
+
+}
+
+func (t *Table) getInChunk(pk int, a interface{}) error {
+	// get from chunk
 	value := t.Chunk.Get(pk)
 	valueMap, ok := value.(map[string]interface{})
 	if ok {
-		err = map2struct(valueMap, a)
+		// assign to struct
+		err := map2struct(valueMap, a)
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return ErrorNoData
+}
+
+// Get data by index value.
+// The index parameter means index names.
+// And they are affected together. So if some indexes, the result is in merged index result.
+// If found pk slice, it assigns max pk one to return.
+func (t *Table) GetByIndex(a interface{}, index []string) error {
+	// struct to map
+	dataMap, err := struct2map(a)
+	if err != nil {
+		return err
+	}
+
+	ids := []int{}
+
+	for _, indexName := range index {
+		idSlice := []int{}
+		value := dataMap[indexName]
+		if idx, ok := t.Index[indexName]; ok {
+			if idx.Type == INDEX_STRING {
+				idSlice = idx.GetIds(value.(string))
+			}
+			if idx.Type == INDEX_INT {
+				idSlice = idx.GetIds(int(value.(float64)))
+			}
+		}
+
+		ids = mergeIntSliceUnique(ids, idSlice)
+	}
+
+	if len(ids) > 0 {
+		sortIntSliceDesc(ids)
+	}else {
+		return ErrorNoData
+	}
+
+	// get max id one
+	return t.getInChunk(ids[0],a)
 }
 
 func createSchema(rt reflect.Type, t *Table, s *Storage) error {

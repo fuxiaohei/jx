@@ -1,5 +1,7 @@
 package gojx
 
+import "errors"
+
 const (
 	VERSION = "0.1"
 
@@ -24,6 +26,8 @@ var (
 	ErrInsertNoTable = "insert no-table type '%s'"
 
 	ErrGetPKMissing = "get non-exist data of pk '%d'"
+
+	ErrorNoData = errors.New("no data")
 )
 
 

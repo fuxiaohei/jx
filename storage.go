@@ -69,6 +69,11 @@ func (s *Storage) Get(a interface{}, index ...string) error {
 		return err
 	}
 
+	// if use index, get by index not pk
+	if len(index) > 0{
+		return table.GetByIndex(a,index)
+	}
+
 	table.GetByPK(a)
 	return nil
 }

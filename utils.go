@@ -7,10 +7,10 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"sort"
 )
 
 func setStructPKInt(a interface{}, name string, id int) {
-	fmt.Println("set pk",a)
 	rv := reflect.ValueOf(a)
 	field := rv.Elem().FieldByName(name)
 	if !field.CanSet() {
@@ -88,11 +88,25 @@ func map2struct(tmp map[string]interface{}, data interface{}) error {
 	return json.Unmarshal(jsonBytes, data)
 }
 
-func inIntSlice(s []int,i int)bool{
-	for _,j := range s{
-		if i == j{
+func inIntSlice(s []int, i int) bool {
+	for _, j := range s {
+		if i == j {
 			return true
 		}
 	}
 	return false
+}
+
+func mergeIntSliceUnique(src []int, mg []int) []int {
+	t := src
+	for _, i := range mg {
+		if !inIntSlice(src, i) {
+			t = append(t, i)
+		}
+	}
+	return t
+}
+
+func sortIntSliceDesc(src []int) {
+	sort.Sort(sort.Reverse(sort.IntSlice(src)))
 }
