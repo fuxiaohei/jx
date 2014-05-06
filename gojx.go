@@ -12,6 +12,7 @@ const (
 )
 
 var (
+	// default chunk size, means the number of saving objects in this chunk file.
 	CHUNK_SIZE = 200
 
 
@@ -22,6 +23,8 @@ var (
 	ErrSchemaIndexTypeError = "schema '%s' index field '%s' need string or int type"
 
 	ErrPutMissingSchema = "put '%s' missing schema"
+	ErrGetMissingSchema = "get '%s' missing schema"
+	ErrGetPKInvalid = "get '%s' by error pk `%d`"
 
 	ErrorNoData = errors.New("no data")
 )

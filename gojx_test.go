@@ -60,7 +60,7 @@ func BenchmarkInsertDataMulti(b *testing.B) {
 	}
 }
 
-/*
+
 func BenchmarkGetPkInDelayLoad(b *testing.B) {
 	b.StopTimer()
 	my_init()
@@ -83,4 +83,3 @@ func BenchmarkGetPkInPreLoad(b *testing.B) {
 	}
 }
 
-*/

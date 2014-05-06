@@ -12,6 +12,7 @@ type Schema struct {
 	file        string
 }
 
+// create new schema from reflect.Type.
 func NewSchema(rt reflect.Type) (s *Schema, err error) {
 	numField := rt.NumField()
 	if numField < 1 {

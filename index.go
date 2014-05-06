@@ -13,6 +13,10 @@ type Index struct {
 	PK    []int                       `json:"pk"`
 }
 
+// put data to fill index slice.
+// it will fill all indexes and pk slice.
+// remember that this method only operates index's memory data.
+// please call Index.Flush() to write into file.
 func (idx *Index) Put(data map[string]interface{}, pk int) {
 	for name, t := range idx.Type {
 		// add pk
@@ -48,10 +52,14 @@ func (idx *Index) Put(data map[string]interface{}, pk int) {
 	}
 }
 
+// write index object to file.
 func (idx *Index) Flush(s *Storage) error {
 	return toJsonFile(path.Join(s.dir, idx.Name+".idx"), idx)
 }
 
+// create new index with schema.
+// try to load from file first.
+// if fails, create empty index object.
 func NewIndex(sc *Schema, s *Storage) (idx *Index, err error) {
 	idxFile := path.Join(s.dir, sc.Name+".idx")
 	idx = new(Index)

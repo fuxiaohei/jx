@@ -8,6 +8,7 @@ import (
 	"strconv"
 )
 
+// storage struct manages all types, schema objects, index objects and chunks.
 type Storage struct {
 	dir      string
 	typeData map[string]reflect.Type
@@ -20,9 +21,13 @@ type Storage struct {
 	chunk *Chunk
 }
 
+// put values to storage.
+// if the value's type is not registered, stop and return error.
+// this method will write all changes to file directly.
 func (s *Storage) Put(value ...interface{}) error {
 	names := []string{}
 	for _, a := range value {
+		// get type
 		rt, err := getStructPointer(a)
 		if err != nil {
 			return err
@@ -32,7 +37,6 @@ func (s *Storage) Put(value ...interface{}) error {
 		if !inStringSlice(names, name) {
 			names = append(names, name)
 		}
-
 
 		// get index
 		idx, ok := s.indexData[name]
@@ -84,10 +88,50 @@ func (s *Storage) Put(value ...interface{}) error {
 		return err
 	}
 
-
 	return nil
 }
 
+// get data by pk value.
+// if found, assign data to passed interface value.
+func (s *Storage) Get(a interface{}) error {
+	rt, err := getStructPointer(a)
+	if err != nil {
+		return err
+	}
+	name := rt.Name()
+
+	if _, ok := s.schemaData[name]; !ok {
+		return fmtError(ErrGetMissingSchema, rt)
+	}
+
+	data, err := struct2map(a)
+	if err != nil {
+		return err
+	}
+
+	pk := int(data[s.schemaData[name].PK].(float64))
+	if pk < 1 {
+		return fmtError(ErrGetPKInvalid, rt, pk)
+	}
+
+	_, result, err := s.chunk.Get(name + strconv.Itoa(pk))
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return ErrorNoData
+	}
+	tmp, err := struct2map(result)
+	if err != nil {
+		return err
+	}
+
+	return map2struct(tmp, a)
+}
+
+// register type to storage.
+// struct type will be used for schema.
+// if registered, it will be overwritten.
 func (s *Storage) Register(data ...interface{}) error {
 	for _, a := range data {
 		rt, err := getStructPointer(a)
@@ -107,6 +151,7 @@ func (s *Storage) Register(data ...interface{}) error {
 	return s.bootstrap()
 }
 
+// check schema objects loaded.
 func (s *Storage) IsLoadSchema() bool {
 	return len(s.schemaData) > 0
 }
@@ -142,6 +187,8 @@ func (s *Storage) bootstrap() error {
 	return nil
 }
 
+// create new storage in directory.
+// it loads schemas, indexes and chunks.
 func NewStorage(dir string) (s *Storage, err error) {
 	if !com.IsDir(dir) {
 		err = os.MkdirAll(dir, os.ModePerm)
