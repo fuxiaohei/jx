@@ -11,10 +11,10 @@ var (
 )
 
 type user struct {
-	Id       int    `gojx:"pk"`
-	UserName string `gojx:"index"`
+	Id       int    `jx:"pk"`
+	UserName string `jx:"index"`
 	Password string
-	Email    string `gojx:"index"`
+	Email    string `jx:"index"`
 }
 
 func my_init() {
@@ -26,7 +26,7 @@ func my_init() {
 
 func insert() {
 	for i := 0; i < 888; i++ {
-		s.Insert(insertUser)
+		s.Put(insertUser)
 	}
 }
 
@@ -35,10 +35,32 @@ func BenchmarkInsertData(b *testing.B) {
 	my_init()
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		s.Insert(insertUser)
+		s.Put(insertUser)
 	}
 }
 
+func BenchmarkInsertDataEach(b *testing.B) {
+	b.StopTimer()
+	my_init()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		s.Put(insertUser)
+		s.Put(insertUser)
+		s.Put(insertUser)
+		s.Put(insertUser)
+	}
+}
+
+func BenchmarkInsertDataMulti(b *testing.B) {
+	b.StopTimer()
+	my_init()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		s.Put(insertUser, insertUser, insertUser, insertUser)
+	}
+}
+
+/*
 func BenchmarkGetPkInDelayLoad(b *testing.B) {
 	b.StopTimer()
 	my_init()
@@ -61,3 +83,4 @@ func BenchmarkGetPkInPreLoad(b *testing.B) {
 	}
 }
 
+*/

@@ -3,8 +3,7 @@ package gojx
 import "errors"
 
 const (
-	VERSION = "0.1"
-
+	VERSION = "0.2"
 
 	INDEX_INT    = "INT"
 	INDEX_STRING = "STRING"
@@ -13,7 +12,7 @@ const (
 )
 
 var (
-	CHUNK_SIZE = 100
+	CHUNK_SIZE = 200
 
 
 	ErrRegisterNeedStructPointer = "register type need struct pointer"
@@ -21,12 +20,8 @@ var (
 	ErrSchemaNeedField      = "schema '%s' need field"
 	ErrSchemaPKNeedInt      = "schema '%s' pk field '%s' need int type"
 	ErrSchemaIndexTypeError = "schema '%s' index field '%s' need string or int type"
-	ErrSchemaWriteNoFile    = "schema `%s` write to no file"
 
-	ErrInsertNoType  = "insert unregistered type '%s'"
-	ErrInsertNoTable = "insert no-table type '%s'"
-
-	ErrGetPKMissing = "get non-exist data of pk '%d'"
+	ErrPutMissingSchema = "put '%s' missing schema"
 
 	ErrorNoData = errors.New("no data")
 )

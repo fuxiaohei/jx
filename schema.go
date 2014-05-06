@@ -1,45 +1,33 @@
 package gojx
 
-import (
-	"reflect"
-)
+import "reflect"
 
 type Schema struct {
+	Name        string   `json:"name"`
 	PK          string   `json:"pk"`
-	StringIndex []string `json:"strings"`
-	IntIndex    []string `json:"ints"`
-	MaxId       int      `json:"max"`
-	ChunkSize   int      `json:"chuck_size"`
-	name        string
+	StringIndex []string `json:"string"`
+	IntIndex    []string `json:"int"`
+	Max         int      `json:"max"`
+	ChunkSize   int      `json:"chunk_size"`
 	file        string
 }
 
-// Write schema to file.
-// When schema creating, the file path is assigned in Schema.file.
-func (s *Schema) Write() error {
-	if s.file == "" {
-		return fmtError(ErrSchemaWriteNoFile, s.name)
-	}
-	return toJsonFile(s.file, s)
-}
-
-// Create new schema from reflect.Type.
-// It parsed struct tag of `gojx:"**"`.
-// No Schema support int pk, int and string index types.
-func NewSchema(rt reflect.Type) (*Schema, error) {
+func NewSchema(rt reflect.Type) (s *Schema, err error) {
 	numField := rt.NumField()
 	if numField < 1 {
 		return nil, fmtError(ErrSchemaNeedField, rt)
 	}
-	schema := &Schema{PK: "",
+	schema := &Schema{
+		Name:        rt.Name(),
+		PK:          "",
 		StringIndex: make([]string, 0),
 		IntIndex:    make([]string, 0),
-		MaxId:       0,
+		Max:         0,
 		ChunkSize:   CHUNK_SIZE,
 	}
 	for i := 0; i < numField; i++ {
 		field := rt.Field(i)
-		tag := field.Tag.Get("gojx")
+		tag := field.Tag.Get("jx")
 		if tag == "" || tag == "-" {
 			continue
 		}

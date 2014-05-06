@@ -1,102 +1,79 @@
 package gojx
 
 import (
-	"strconv"
+	"fmt"
+	"path"
 )
 
 type Index struct {
-	Name       string           `json:"name"`
-	Type       string           `json:"type"`
-	StringData map[string][]int `json:"string_dat,omitempty"`
-	StringKeys []string         `json:"strings,omitempty"`
-	IntData    map[string][]int `json:"int_dat,omitempty"`
-	IntKeys    []int            `json:"ints,omitempty"`
-	PK         []int            `json:"pk,omitempty"`
+	Name  string                      `json:"name"`
+	Type  map[string]string           `json:"type"`
+	Data  map[string]map[string][]int `json:"data"`
+	Queue map[string][]interface{}    `json:"queue"`
+	PK    []int                       `json:"pk"`
 }
 
-func (i *Index) updateKeys() {
-	if i.Type == INDEX_INT {
-		keys := []int{}
-		for k, _ := range i.IntData {
-			kInt, _ := strconv.Atoi(k)
-			keys = append(keys, kInt)
+func (idx *Index) Put(data map[string]interface{}, pk int) {
+	for name, t := range idx.Type {
+		// add pk
+		if t == INDEX_PK {
+			if idx.PK == nil {
+				idx.PK = []int{pk}
+			} else {
+				idx.PK = append(idx.PK, pk)
+			}
+			continue
 		}
-		i.IntKeys = keys
-		return
-	}
-	if i.Type == INDEX_STRING {
-		keys := []string{}
-		for k, _ := range i.StringData {
-			keys = append(keys, k)
-		}
-		i.StringKeys = keys
-		return
-	}
-}
 
-// Insert pk int to index.
-// The value is index field value.
-// If insert pk int, the value is ignored.
-func (i *Index) Insert(value string, id int) {
-	if i.Type == INDEX_INT {
-		if _, ok := i.IntData[value]; !ok {
-			i.IntData[value] = []int{id}
+		// add pk to index
+		key := fmt.Sprintf("%v", data[name])
+		if idx.Data[name] == nil {
+			idx.Data[name] = map[string][]int{key: []int{pk}}
 		} else {
-			i.IntData[value] = append(i.IntData[value], id)
+			if idx.Data[name][key] == nil {
+				idx.Data[name][key] = []int{pk}
+			} else {
+				idx.Data[name][key] = append(idx.Data[name][key], pk)
+			}
 		}
-		i.updateKeys()
-		return
-	}
-	if i.Type == INDEX_STRING {
-		if _, ok := i.StringData[value]; !ok {
-			i.StringData[value] = []int{id}
+
+		// add value to queue
+		if idx.Queue[name] == nil {
+			idx.Queue[name] = []interface{}{data[name]}
 		} else {
-			i.StringData[value] = append(i.StringData[value], id)
+			if !inItfSlice(idx.Queue[name], data[name]) {
+				idx.Queue[name] = append(idx.Queue[name], data[name])
+			}
 		}
-		i.updateKeys()
-		return
-	}
-	if i.Type == INDEX_PK {
-		i.PK = append(i.PK, id)
-		return
 	}
 }
 
-// Get id slice by value.
-// It checks index type itself.
-// So need string value for string index or int value for int index.
-func (i *Index) GetIds(value interface{}) []int {
-	if i.Type == INDEX_STRING {
-		str, ok := value.(string)
-		if !ok {
-			return []int{}
-		}
-		return i.StringData[str]
-	}
-	if i.Type == INDEX_INT {
-		it, ok := value.(int)
-		if !ok {
-			return []int{}
-		}
-		return i.IntData[strconv.Itoa(it)]
-	}
-	return []int{}
+func (idx *Index) Flush(s *Storage) error {
+	return toJsonFile(path.Join(s.dir, idx.Name+".idx"), idx)
 }
 
-// Create new index with name and type.
-// Index support int and string type.
-func NewIndex(name string, idxType string) *Index {
-	idx := &Index{Name: name, Type: idxType}
-	if idx.Type == INDEX_PK {
-		idx.PK = make([]int, 0)
+func NewIndex(sc *Schema, s *Storage) (idx *Index, err error) {
+	idxFile := path.Join(s.dir, sc.Name+".idx")
+	idx = new(Index)
+	err = fromJsonFile(idxFile, idx)
+	if err == nil {
+		return
 	}
-	if idx.Type == INDEX_INT {
-		idx.IntData = make(map[string][]int)
-		idx.IntKeys = make([]int, 0)
+	idx = &Index{Name: sc.Name,
+		PK:    []int{},
+		Data:  make(map[string]map[string][]int),
+		Queue: make(map[string][]interface{}),
+		Type:  map[string]string{},
 	}
-	if idx.Type == INDEX_STRING {
-		idx.StringData = make(map[string][]int)
-		idx.StringKeys = make([]string, 0)
+	idx.Type[sc.PK] = INDEX_PK
+	for _, i := range sc.StringIndex {
+		idx.Data[i] = make(map[string][]int)
+		idx.Type[i] = INDEX_STRING
 	}
-	return idx
+	for _, i := range sc.IntIndex {
+		idx.Data[i] = make(map[string][]int)
+		idx.Type[i] = INDEX_INT
+	}
+	err = toJsonFile(idxFile, idx)
+	return
 }

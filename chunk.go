@@ -11,140 +11,89 @@ type Chunk struct {
 	writeCursor    string
 	readCursorInt  int
 	readCursor     string
-	rawData        map[string]map[string]interface{}
-	size           int
-	name           string
-	s              *Storage
+
+	rawData map[int]map[string]interface{}
+
+	size int
+	dir  string
 }
 
-// Insert data to chunk.
-// The id is pk int value.
-// If the current write cursor map is length of chunk size, it moves to next chunk.
-func (c *Chunk) Insert(data interface{}, id int) error {
-	if len(c.rawData[c.writeCursor]) >= c.size {
-		c.moveWriteNext()
-	}
-	key := c.name + "-" + strconv.Itoa(id)
-	c.rawData[c.writeCursor][key] = data
-	file := path.Join(c.s.dir, c.name+"."+c.writeCursor)
-	return toJsonFile(file, c.rawData[c.writeCursor])
+func (c *Chunk) isWritingChunkFull() bool {
+	return len(c.rawData[c.writeCursorInt]) >= c.size
 }
 
-func (c *Chunk) moveWriteNext() {
+func (c *Chunk) moveWriteNext() (err error) {
 	c.writeCursorInt++
-	c.writeCursor = "dat"+strconv.Itoa(c.writeCursorInt)
-	if len(c.rawData[c.writeCursor]) < 1 {
-		c.rawData[c.writeCursor] = make(map[string]interface{})
-	}
-	println("move chunk write cursor to " + c.name + "." + c.writeCursor)
+	c.writeCursor = "data"+strconv.Itoa(c.writeCursorInt)
+	c.rawData[c.writeCursorInt] = make(map[string]interface{})
+	err = toJsonFile(path.Join(c.dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
+	return
 }
 
-func (c *Chunk) getInAll(id int) (string, interface{}) {
-	for name, _ := range c.rawData {
-		value := c.getInChunk(name, id)
-		if value != nil {
-			return name, value
+func (c *Chunk) Put(key string, data map[string]interface{}) (err error) {
+	// try to move next if current chunk is full
+	if c.isWritingChunkFull() {
+		err = c.FlushCurrent()
+		if err != nil {
+			return err
+		}
+		err = c.moveWriteNext()
+		if err != nil {
+			return
 		}
 	}
-	return "", nil
+	// write to file
+	c.rawData[c.writeCursorInt][key] = data
+	return
 }
 
-func (c *Chunk) getInChunk(name string, id int) interface{} {
-	key := c.name + "-" + strconv.Itoa(id)
-	return c.rawData[name][key]
+func (c *Chunk) FlushCurrent() error {
+	return toJsonFile(path.Join(c.dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
 }
 
-// Get chunk by pk id.
-// It reads all memory data first. If found, return interface value.
-// If not found, move reader cursor to prev one, load proper chunk to memory.
-// Then find it in the last-loaded chunk data.
-func (c *Chunk) Get(id int) (string, interface{}) {
-	cursor, value := c.getInAll(id)
-	if value == nil {
-		if c.moveReadPrev() {
-			return c.Get(id)
-		} else {
-			return "", nil
-		}
-	}
-	return cursor, value
-}
+// create new chunk.
+// It's default cursor is 1.
+// And write first chunk file as empty data set.
+func NewChunk(dir string, size int) (c *Chunk, err error) {
+	c = &Chunk{size: size, dir: dir, rawData: make(map[int]map[string]interface{})}
 
-func (c *Chunk) moveReadPrev() bool {
-	c.readCursorInt--
-	if c.readCursorInt < 1 {
-		return false
-	}
-	c.readCursor = "dat"+strconv.Itoa(c.readCursorInt)
-	if len(c.rawData[c.readCursor]) < 1 {
-		c.rawData[c.readCursor] = make(map[string]interface{})
-		file := path.Join(c.s.dir, c.name+"."+c.readCursor)
-		tmp := make(map[string]interface{})
-		fromJsonFile(file, &tmp)
-		c.rawData[c.readCursor] = tmp
-		println("move chunk read cursor to " + c.name + "." + c.readCursor)
-	}
-	return true
-}
-
-// Create new chunk for table in storage.
-// It creates an empty chunk file as dat1.
-func NewChunk(t *Table, s *Storage) (*Chunk, error) {
-	c := new(Chunk)
-	c.s = s
-	c.name = t.Name
-	c.size = t.Schema.ChunkSize
-
-	// init first chunk
-	c.writeCursorInt = 1
-	c.writeCursor = "dat1"
 	c.readCursorInt = 1
-	c.readCursor = "dat1"
+	c.readCursor = "data"+strconv.Itoa(c.readCursorInt)
+	c.writeCursorInt = c.readCursorInt
+	c.writeCursor = c.readCursor
 
-	// write empty data to first chunk
-	c.rawData = make(map[string]map[string]interface{})
-	c.rawData[c.writeCursor] = make(map[string]interface{})
-	file := path.Join(c.s.dir, c.name+"."+c.writeCursor)
-	err := toJsonFile(file, c.rawData[c.writeCursor])
-	return c, err
+	c.rawData[c.writeCursorInt] = make(map[string]interface{})
+
+	err = toJsonFile(path.Join(dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
+	return
 }
 
-// Read chunks in files for table and storage.
-// It walks to recent data file as datX.
-// And set write-read cursor to recent index.
-func NewReadChunk(t *Table, s *Storage) (*Chunk, error) {
-	c := new(Chunk)
-	c.s = s
-	c.name = t.Name
-	c.size = t.Schema.ChunkSize
-
-	// walk to last chunk file
-	i := 1
+// read existed chunks.
+// Walk all chunks to the last.
+// Move cursor to last int and read last chunk as pre-load data.
+func ReadChunk(dir string, size int) (c *Chunk, err error) {
+	i := 2
 	for {
-		file := path.Join(s.dir, c.name+".dat"+strconv.Itoa(i))
+		key := "data" + strconv.Itoa(i)
+		file := path.Join(dir, key+".dat")
 		if com.IsFile(file) {
 			i++
 			continue
 		}
 		break
 	}
-	i--
-	c.writeCursorInt = i
-	c.writeCursor = "dat"+strconv.Itoa(i)
-	c.readCursorInt = i
-	c.readCursor = c.writeCursor
+	c = &Chunk{size: size, dir: dir, rawData: make(map[int]map[string]interface{})}
 
-	// load last chunk to memory
-	c.rawData = make(map[string]map[string]interface{})
-	c.rawData[c.writeCursor] = make(map[string]interface{})
-	file := path.Join(c.s.dir, c.name+"."+c.writeCursor)
-	tmp := make(map[string]interface{})
-	err := fromJsonFile(file, &tmp)
+	c.readCursorInt = i-1
+	c.readCursor = "data"+strconv.Itoa(c.readCursorInt)
+	c.writeCursorInt = c.readCursorInt
+	c.writeCursor = c.readCursor
+
+	var tmp map[string]interface{}
+	err = fromJsonFile(path.Join(dir, c.readCursor+".dat"), &tmp)
 	if err != nil {
-		return nil, err
+		return
 	}
-	c.rawData[c.writeCursor] = tmp
-	println("write chunk cursor to " + c.name + "." + c.writeCursor)
-	println("read chunk cursor to " + c.name + "." + c.readCursor)
-	return c, nil
+	c.rawData[c.readCursorInt] = tmp
+	return
 }

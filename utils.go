@@ -27,29 +27,6 @@ func getStructPointer(data interface{}) (reflect.Type, error) {
 	return nil, fmtError(ErrRegisterNeedStructPointer)
 }
 
-func checkStructType(data interface{}, s *Storage) error {
-	rt, err := getStructPointer(data)
-	if err != nil {
-		return err
-	}
-	if _, ok := s.types[rt.Name()]; ok {
-		return nil
-	}
-	return fmtError(ErrInsertNoType, rt)
-}
-
-func getTable(data interface{}, s *Storage) (*Table, error) {
-	rt, err := getStructPointer(data)
-	if err != nil {
-		return nil, err
-	}
-	t, ok := s.tables[rt.Name()]
-	if !ok {
-		return nil, fmtError(ErrInsertNoTable, rt)
-	}
-	return t, nil
-}
-
 func fmtError(msg string, a ...interface{}) error {
 	return errors.New(fmt.Sprintf(msg, a...))
 }
@@ -91,6 +68,24 @@ func map2struct(tmp map[string]interface{}, data interface{}) error {
 func inIntSlice(s []int, i int) bool {
 	for _, j := range s {
 		if i == j {
+			return true
+		}
+	}
+	return false
+}
+
+func inStringSlice(s []string, i string) bool {
+	for _, j := range s {
+		if i == j {
+			return true
+		}
+	}
+	return false
+}
+
+func inItfSlice(s []interface{}, v interface{}) bool {
+	for _, vv := range s {
+		if vv == v {
 			return true
 		}
 	}
