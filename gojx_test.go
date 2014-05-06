@@ -17,22 +17,32 @@ type user struct {
 	Email    string `jx:"index"`
 }
 
-func my_init() {
+func s_init(ins bool) {
 	os.RemoveAll("test")
-	s, _ = NewStorage("test")
-	s.Register(new(user))
 	insertUser = &user{0, "username", "password", "email"}
+	initStorage()
+	if ins {
+		insert()
+	}
 }
 
 func insert() {
-	for i := 0; i < 888; i++ {
+	for i := 0; i < 999; i++ {
 		s.Put(insertUser)
+	}
+}
+
+func initStorage() {
+	s = nil
+	s, _ = NewStorage("test")
+	if !s.IsLoadSchema() {
+		s.Register(new(user))
 	}
 }
 
 func BenchmarkInsertData(b *testing.B) {
 	b.StopTimer()
-	my_init()
+	s_init(false)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		s.Put(insertUser)
@@ -41,7 +51,7 @@ func BenchmarkInsertData(b *testing.B) {
 
 func BenchmarkInsertDataEach(b *testing.B) {
 	b.StopTimer()
-	my_init()
+	s_init(false)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		s.Put(insertUser)
@@ -53,20 +63,19 @@ func BenchmarkInsertDataEach(b *testing.B) {
 
 func BenchmarkInsertDataMulti(b *testing.B) {
 	b.StopTimer()
-	my_init()
+	s_init(false)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		s.Put(insertUser, insertUser, insertUser, insertUser)
 	}
 }
 
-
 func BenchmarkGetPkInDelayLoad(b *testing.B) {
 	b.StopTimer()
-	my_init()
-	insert()
+	s_init(true)
+	initStorage()
 	b.StartTimer()
-	u := &user{Id:9}
+	u := &user{Id: 9}
 	for i := 0; i < b.N; i++ {
 		s.Get(u)
 	}
@@ -74,12 +83,11 @@ func BenchmarkGetPkInDelayLoad(b *testing.B) {
 
 func BenchmarkGetPkInPreLoad(b *testing.B) {
 	b.StopTimer()
-	my_init()
-	insert()
+	s_init(true)
+	initStorage()
 	b.StartTimer()
-	u := &user{Id:911}
+	u := &user{Id: 911}
 	for i := 0; i < b.N; i++ {
 		s.Get(u)
 	}
 }
-
