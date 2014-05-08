@@ -2,86 +2,141 @@ package gojx
 
 import (
 	"fmt"
+	"github.com/Unknwon/com"
 	"path"
+	"strconv"
 )
 
 type Index struct {
-	Name  string                      `json:"name"`
-	Type  map[string]string           `json:"type"`
-	Data  map[string]map[string][]int `json:"data"`
-	Queue map[string][]interface{}    `json:"queue"`
-	PK    []int                       `json:"pk"`
+	raw    map[int]map[string]interface{}
+	writeC int
+	dir    string
+	size   int
 }
 
-// put data to fill index slice.
-// it will fill all indexes and pk slice.
-// remember that this method only operates index's memory data.
-// please call Index.Flush() to write into file.
-func (idx *Index) Put(data map[string]interface{}, pk int) {
-	for name, t := range idx.Type {
-		// add pk
-		if t == INDEX_PK {
-			if idx.PK == nil {
-				idx.PK = []int{pk}
-			} else {
-				idx.PK = append(idx.PK, pk)
-			}
-			continue
-		}
+// get index cursor string.
+func (idx *Index) getCursor(i int) string {
+	return "index" + strconv.Itoa(i) + ".idx"
+}
 
-		// add pk to index
-		key := fmt.Sprintf("%v", data[name])
-		if idx.Data[name] == nil {
-			idx.Data[name] = map[string][]int{key: []int{pk}}
-		} else {
-			if idx.Data[name][key] == nil {
-				idx.Data[name][key] = []int{pk}
-			} else {
-				idx.Data[name][key] = append(idx.Data[name][key], pk)
-			}
-		}
+// get index cursor file.
+func (idx *Index) getCursorFile(i int) string {
+	return path.Join(idx.dir, idx.getCursor(i))
+}
 
-		// add value to queue
-		if idx.Queue[name] == nil {
-			idx.Queue[name] = []interface{}{data[name]}
-		} else {
-			if !inItfSlice(idx.Queue[name], data[name]) {
-				idx.Queue[name] = append(idx.Queue[name], data[name])
-			}
+// is current index file is full
+func (idx *Index) isCurrentFull() bool {
+	return len(idx.raw[idx.writeC]) > idx.size
+}
+
+// move index writer cursor to next.
+func (idx *Index) moveWriteNext() error {
+	e := idx.FlushCurrent()
+	if e != nil {
+		return e
+	}
+	idx.writeC++
+	idx.raw[idx.writeC] = make(map[string]interface{})
+	return nil
+}
+
+// find index data by key.
+func (idx *Index) findKey(key string) (int, interface{}) {
+	for j, v := range idx.raw {
+		if _, ok := v[key]; ok {
+			return j, v[key]
 		}
+	}
+	return 0, nil
+}
+
+// build index key with type name, field name and value string.
+func (idx *Index) buildKey(name string, field string, value interface{}) string {
+	return fmt.Sprintf("%s%s%v", name, field, value)
+}
+
+// put value and key into index raw data.
+// it updates memory data, not files.
+func (idx *Index) putValue(key string, v interface{}) {
+	i, pkIndex := idx.findKey(key)
+	if pkIndex == nil {
+		tmp := []interface{}{v}
+		idx.raw[idx.writeC][key] = tmp
+	} else {
+		tmp := pkIndex.([]interface{})
+		tmp = append(tmp, v)
+		idx.raw[i][key] = tmp
 	}
 }
 
-// write index object to file.
-func (idx *Index) Flush(s *Storage) error {
-	return toJsonFile(path.Join(s.dir, idx.Name+".idx"), idx)
+// put data into indexes with pk and schema.
+// it writes indexes in memory.
+// use Index.FlushCurrent() to flush files.
+func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
+	if idx.isCurrentFull() {
+		e := idx.moveWriteNext()
+		if e != nil {
+			return e
+		}
+	}
+
+	// write pk
+	pkKey := idx.buildKey(sc.Name, "pk", "")
+	idx.putValue(pkKey, pk)
+
+	// write indexes
+	for _, idxName := range sc.Index {
+		key := idx.buildKey(sc.Name, idxName, data[idxName])
+		idx.putValue(key, pk)
+	}
+	return nil
 }
 
-// create new index with schema.
-// try to load from file first.
-// if fails, create empty index object.
-func NewIndex(sc *Schema, s *Storage) (idx *Index, err error) {
-	idxFile := path.Join(s.dir, sc.Name+".idx")
+// flush current index data map.
+func (idx *Index) FlushCurrent() error {
+	return toJsonFile(idx.getCursorFile(idx.writeC), idx.raw[idx.writeC])
+}
+
+// create new index with dir.
+func NewIndex(dir string) (idx *Index, e error) {
 	idx = new(Index)
-	err = fromJsonFile(idxFile, idx)
-	if err == nil {
-		return
+	idx.dir = dir
+	idx.writeC = 1
+	idx.size = INDEX_SIZE
+	idx.raw = make(map[int]map[string]interface{})
+	idx.raw[idx.writeC] = make(map[string]interface{})
+	e = toJsonFile(path.Join(idx.dir, idx.getCursor(idx.writeC)), idx.raw[idx.writeC])
+	return
+}
+
+// read index in dir.
+// move to last index file for cursor.
+// then load all indexes data to map.
+func ReadIndex(dir string) (idx *Index, e error) {
+	i := 2
+	idx = new(Index)
+	idx.dir = dir
+	idx.size = INDEX_SIZE
+	for {
+		if !com.IsFile(idx.getCursorFile(i)) {
+			break
+		}
+		i++
 	}
-	idx = &Index{Name: sc.Name,
-		PK:    []int{},
-		Data:  make(map[string]map[string][]int),
-		Queue: make(map[string][]interface{}),
-		Type:  map[string]string{},
+	i--
+	idx.writeC = i
+	idx.raw = make(map[int]map[string]interface{})
+	for {
+		if i < 1 {
+			break
+		}
+		var tmp map[string]interface{}
+		e = fromJsonFile(idx.getCursorFile(i), &tmp)
+		if e != nil {
+			return
+		}
+		idx.raw[i] = tmp
+		i--
 	}
-	idx.Type[sc.PK] = INDEX_PK
-	for _, i := range sc.StringIndex {
-		idx.Data[i] = make(map[string][]int)
-		idx.Type[i] = INDEX_STRING
-	}
-	for _, i := range sc.IntIndex {
-		idx.Data[i] = make(map[string][]int)
-		idx.Type[i] = INDEX_INT
-	}
-	err = toJsonFile(idxFile, idx)
 	return
 }

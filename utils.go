@@ -7,24 +7,24 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
-	"sort"
 )
 
-func setStructPKInt(a interface{}, name string, id int) {
-	rv := reflect.ValueOf(a)
-	field := rv.Elem().FieldByName(name)
-	if !field.CanSet() {
+func getReflectType(a interface{}) (rt reflect.Type, e error) {
+	rt = reflect.TypeOf(a)
+	if rt.Kind() != reflect.Ptr {
+		e = ErrorNeedPointer
 		return
 	}
-	field.SetInt(int64(id))
+	rt = rt.Elem()
+	if rt.Kind() != reflect.Struct {
+		e = ErrorNeedPointer
+		return
+	}
+	return
 }
 
-func getStructPointer(data interface{}) (reflect.Type, error) {
-	rt := reflect.TypeOf(data)
-	if rt.Kind() == reflect.Ptr && rt.Elem().Kind() == reflect.Struct {
-		return rt.Elem(), nil
-	}
-	return nil, fmtError(ErrRegisterNeedStructPointer)
+func getMapPk(data map[string]interface{}, pk string) int {
+	return int(data[pk].(float64))
 }
 
 func fmtError(msg string, a ...interface{}) error {
@@ -63,45 +63,4 @@ func map2struct(tmp map[string]interface{}, data interface{}) error {
 		return err
 	}
 	return json.Unmarshal(jsonBytes, data)
-}
-
-func inIntSlice(s []int, i int) bool {
-	for _, j := range s {
-		if i == j {
-			return true
-		}
-	}
-	return false
-}
-
-func inStringSlice(s []string, i string) bool {
-	for _, j := range s {
-		if i == j {
-			return true
-		}
-	}
-	return false
-}
-
-func inItfSlice(s []interface{}, v interface{}) bool {
-	for _, vv := range s {
-		if vv == v {
-			return true
-		}
-	}
-	return false
-}
-
-func mergeIntSliceUnique(src []int, mg []int) []int {
-	t := src
-	for _, i := range mg {
-		if !inIntSlice(src, i) {
-			t = append(t, i)
-		}
-	}
-	return t
-}
-
-func sortIntSliceDesc(src []int) {
-	sort.Sort(sort.Reverse(sort.IntSlice(src)))
 }

@@ -3,29 +3,25 @@ package gojx
 import "reflect"
 
 type Schema struct {
-	Name        string   `json:"name"`
-	PK          string   `json:"pk"`
-	StringIndex []string `json:"string"`
-	IntIndex    []string `json:"int"`
-	Max         int      `json:"max"`
-	ChunkSize   int      `json:"chunk_size"`
-	file        string
+	Name  string   `json:"name"`
+	PK    string   `json:"pk"`
+	Index []string `json:"index"`
+	Max   int      `json:"max"`
+	file  string
 }
 
-// create new schema from reflect.Type.
-func NewSchema(rt reflect.Type) (s *Schema, err error) {
+// create new schema with type
+func NewSchema(rt reflect.Type) (sc *Schema, e error) {
 	numField := rt.NumField()
 	if numField < 1 {
-		return nil, fmtError(ErrSchemaNeedField, rt)
+		e = ErrorNeedField
+		return
 	}
-	schema := &Schema{
-		Name:        rt.Name(),
-		PK:          "",
-		StringIndex: make([]string, 0),
-		IntIndex:    make([]string, 0),
-		Max:         0,
-		ChunkSize:   CHUNK_SIZE,
-	}
+	sc = new(Schema)
+	sc.Name = rt.Name()
+	sc.Max = 0
+	sc.Index = []string{}
+
 	for i := 0; i < numField; i++ {
 		field := rt.Field(i)
 		tag := field.Tag.Get("jx")
@@ -34,22 +30,15 @@ func NewSchema(rt reflect.Type) (s *Schema, err error) {
 		}
 		if tag == "pk" {
 			if field.Type.Kind() != reflect.Int {
-				return nil, fmtError(ErrSchemaPKNeedInt, rt, field.Name)
+				e = ErrorNeedPKInt
+				return
 			}
-			schema.PK = field.Name
+			sc.PK = field.Name
 			continue
 		}
 		if tag == "index" {
-			if field.Type.Kind() == reflect.String {
-				schema.StringIndex = append(schema.StringIndex, field.Name)
-				continue
-			}
-			if field.Type.Kind() == reflect.Int {
-				schema.IntIndex = append(schema.IntIndex, field.Name)
-				continue
-			}
-			return nil, fmtError(ErrSchemaIndexTypeError, rt, field.Name)
+			sc.Index = append(sc.Index, field.Name)
 		}
 	}
-	return schema, nil
+	return
 }

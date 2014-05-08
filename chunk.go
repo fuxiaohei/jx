@@ -6,161 +6,178 @@ import (
 	"strconv"
 )
 
-// Chunk manages all chunk files.
 type Chunk struct {
-	writeCursorInt int
-	writeCursor    string
-	readCursorInt  int
-	readCursor     string
+	dir string
 
-	rawData map[int]map[string]interface{}
+	readC, writeC int
+
+	raw map[int]map[string]interface{} // raw data in chunks
+	cache map[string]int // key / chunk cursor map cache
 
 	size int
-	dir  string
 }
 
-// check current chunk is full.
-func (c *Chunk) isWritingChunkFull() bool {
-	return len(c.rawData[c.writeCursorInt]) >= c.size
+// get cursor string by int.
+func (c *Chunk) getCursor(i int) string {
+	return "data" + strconv.Itoa(i) + ".dat"
 }
 
-// move current chunk to next.
-// create new chunk with empty data.
-func (c *Chunk) moveWriteNext() (err error) {
-	c.writeCursorInt++
-	c.writeCursor = "data" + strconv.Itoa(c.writeCursorInt)
-	c.rawData[c.writeCursorInt] = make(map[string]interface{})
-	err = toJsonFile(path.Join(c.dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
-	return
+// get cursor file name by int.
+func (c *Chunk) getCursorFile(i int) string {
+	return path.Join(c.dir, c.getCursor(i))
 }
 
-// put data with key.
-// If the current chunk is full, move to next automatically.
-// Remember this put action is inserting data to memory map.
-// Call chunk.FlushCurrent() to write to file.
-func (c *Chunk) Put(key string, data map[string]interface{}) (err error) {
-	// try to move next if current chunk is full
-	if c.isWritingChunkFull() {
-		err = c.FlushCurrent()
-		if err != nil {
-			return err
-		}
-		err = c.moveWriteNext()
-		if err != nil {
-			return
+// is current chunk full.
+func (c *Chunk) isCurrentFull() bool {
+	return len(c.raw[c.writeC]) > c.size
+}
+
+// move writer chunk to next.
+// it flushes current chunk first.
+func (c *Chunk) moveWriteNext() error {
+	e := c.FlushCurrent()
+	if e != nil {
+		return e
+	}
+	c.writeC++
+	c.raw[c.writeC] = make(map[string]interface{})
+	return nil
+}
+
+// flush chunk by cursor int.
+// if the chunk is nil or not-loaded, return error.
+func (c *Chunk) FlushChunk(i int) error {
+	if _, ok := c.raw[i]; ok {
+		return toJsonFile(path.Join(c.dir, c.getCursor(i)), c.raw[i])
+	}
+	return ErrorFlushNull
+}
+
+// flush current chunk.
+func (c *Chunk) FlushCurrent() error {
+	return c.FlushChunk(c.writeC)
+}
+
+// put data into chunk with key string.
+// if current chunk is full, move to next then insert.
+// it can't write file immediately.
+// use Chunk.FlushCurrent() to sync current writing chunk.
+func (c *Chunk) Put(data interface{}, key string) error {
+	if c.isCurrentFull() {
+		e := c.moveWriteNext()
+		if e != nil {
+			return e
 		}
 	}
-	// write to file
-	c.rawData[c.writeCursorInt][key] = data
-	return
+	c.raw[c.writeC][key] = data
+	return nil
 }
 
-// get data by key in all memory data.
-// it ranges all maps in memory.
-// return chunk cursor and data or nil.
-func (c *Chunk) getInMemory(key string) (i int, data interface{}) {
-	for cursor, chunk := range c.rawData {
-		if _, ok := chunk[key]; ok {
-			data = chunk[key]
-			i = cursor
+// find data in memory data by key.
+// it depends the loaded chunks data.
+func (c *Chunk) findInMem(key string) (cursor int, data interface{}) {
+	for i, m := range c.raw {
+		if _, ok := m[key]; ok {
+			data = m[key]
+			cursor = i
+			c.cache[key] = i
 			return
 		}
 	}
 	return 0, nil
 }
 
-// move read cursor to prev chunk.
-// it loads data in prev chunk to memory and keep.
-func (c *Chunk) moveReadPrev() (bool, error) {
-	// move to 1, stop
-	if c.readCursorInt < 2 {
-		return false, nil
+// find data in non-loaded data by key.
+// it moves read cursor to prev chunk then find data in this chunk.
+// if exist, return. Otherwise, move prev again util no prev chunk.
+func (c *Chunk) findInPrev(key string) (cursor int, data interface{}, e error) {
+	if c.readC < 2 {
+		return
 	}
-	c.readCursorInt--
-	c.readCursor = "data" + strconv.Itoa(c.readCursorInt)
+	c.readC--
 	var tmp map[string]interface{}
-	err := fromJsonFile(path.Join(c.dir, c.readCursor+".dat"), &tmp)
-	if err != nil {
-		return false, err
+	e = fromJsonFile(c.getCursorFile(c.readC), &tmp)
+	if e != nil {
+		return
 	}
-	c.rawData[c.readCursorInt] = tmp
-	return true, nil
+	c.raw[c.readC] = tmp
+	if _, ok := c.raw[c.readC][key]; ok {
+		cursor = c.readC
+		data = c.raw[c.readC][key]
+		c.cache[key] = cursor
+		return
+	}
+	return c.findInPrev(key)
 }
 
-// get data in prev chunks.
-// it will find by moving read cursor automatically until the cursor is at the beginning.
-func (c *Chunk) getInPrev(key string) (i int, data interface{}, err error) {
-	flag, err := c.moveReadPrev()
-	if err != nil || !flag {
+// find data in cache map by key.
+// cache map saves the cursor of chunk where the key in.
+// then find data in proper chunk.
+func (c *Chunk) findInCache(key string) (cursor int, data interface{}) {
+	cursor = c.cache[key]
+	// if chunk is not load, return nil. then call c.findInPrev(key) to find in no-loaded prev chunks.
+	if _,ok:=c.raw[cursor];!ok{
 		return
 	}
-	if _, ok := c.rawData[c.readCursorInt][key]; ok {
-		data = c.rawData[c.readCursorInt][key]
-		i = c.readCursorInt
-		return
+	if cursor > 0 {
+		data = c.raw[cursor][key]
 	}
-	return c.getInPrev(key)
+	return
 }
 
 // get data by key.
-// return the chunk cursor of the data, data interface value or error.
-func (c *Chunk) Get(key string) (i int, data interface{}, err error) {
-	i, data = c.getInMemory(key)
-	if data != nil {
+// find in cache map first.
+// then find in memory map.
+// last find in prev chunks.
+func (c *Chunk) Get(key string) (cursor int, data interface{}, e error) {
+	cursor, data = c.findInCache(key)
+	if data != nil && cursor > 0 {
 		return
 	}
-	i, data, err = c.getInPrev(key)
-	return
-}
-
-// flush current chunk to file.
-func (c *Chunk) FlushCurrent() error {
-	return toJsonFile(path.Join(c.dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
-}
-
-// create new chunk.
-// It's default cursor is 1.
-// And write first chunk file as empty data set.
-func NewChunk(dir string, size int) (c *Chunk, err error) {
-	c = &Chunk{size: size, dir: dir, rawData: make(map[int]map[string]interface{})}
-
-	c.readCursorInt = 1
-	c.readCursor = "data" + strconv.Itoa(c.readCursorInt)
-	c.writeCursorInt = c.readCursorInt
-	c.writeCursor = c.readCursor
-
-	c.rawData[c.writeCursorInt] = make(map[string]interface{})
-
-	err = toJsonFile(path.Join(dir, c.writeCursor+".dat"), c.rawData[c.writeCursorInt])
-	return
-}
-
-// read existed chunks.
-// Walk all chunks to the last.
-// Move cursor to last int and read last chunk as pre-load data.
-func ReadChunk(dir string, size int) (c *Chunk, err error) {
-	i := 2
-	for {
-		key := "data" + strconv.Itoa(i)
-		file := path.Join(dir, key+".dat")
-		if com.IsFile(file) {
-			i++
-			continue
-		}
-		break
+	cursor, data = c.findInMem(key)
+	if data == nil {
+		return c.findInPrev(key)
 	}
-	c = &Chunk{size: size, dir: dir, rawData: make(map[int]map[string]interface{})}
+	return
+}
 
-	c.readCursorInt = i - 1
-	c.readCursor = "data" + strconv.Itoa(c.readCursorInt)
-	c.writeCursorInt = c.readCursorInt
-	c.writeCursor = c.readCursor
+// create new chunk in dir.
+func NewChunk(dir string) (c *Chunk, e error) {
+	c = new(Chunk)
+	c.dir = dir
+	c.readC, c.writeC = 1, 1
+	c.raw = make(map[int]map[string]interface{})
+	c.raw[c.writeC] = map[string]interface{}{}
+	c.size = CHUNK_SIZE
+	c.cache = map[string]int{}
+	e = c.FlushChunk(c.writeC)
+	return
+}
+
+// read chunks in dir.
+// it reads the last chunk as pre-load chunk and move cursor to last.
+func ReadChunk(dir string) (c *Chunk, e error) {
+	i := 2
+	c = new(Chunk)
+	c.dir = dir
+	c.size = CHUNK_SIZE
+	c.cache = map[string]int{}
+	for {
+		if !com.IsFile(c.getCursorFile(i)) {
+			break
+		}
+		i++
+	}
+	i--
+	c.readC, c.writeC = i, i
+	c.raw = make(map[int]map[string]interface{})
+	c.raw[c.readC] = map[string]interface{}{}
 
 	var tmp map[string]interface{}
-	err = fromJsonFile(path.Join(dir, c.readCursor+".dat"), &tmp)
-	if err != nil {
+	e = fromJsonFile(c.getCursorFile(c.readC), &tmp)
+	if e != nil {
 		return
 	}
-	c.rawData[c.readCursorInt] = tmp
+	c.raw[c.readC] = tmp
 	return
 }

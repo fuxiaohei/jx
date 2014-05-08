@@ -4,208 +4,184 @@ import (
 	"github.com/Unknwon/com"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
 )
 
-// storage struct manages all types, schema objects, index objects and chunks.
 type Storage struct {
-	dir      string
-	typeData map[string]reflect.Type
+	dir string
 
 	schemaData map[string]*Schema
 	schemaFile string
 
-	indexData map[string]*Index
-
 	chunk *Chunk
+	index *Index
 }
 
-// put values to storage.
-// if the value's type is not registered, stop and return error.
-// this method will write all changes to file directly.
-func (s *Storage) Put(value ...interface{}) error {
-	names := []string{}
-	for _, a := range value {
-		// get type
-		rt, err := getStructPointer(a)
-		if err != nil {
-			return err
-		}
+// get storage directory.
+func (s *Storage) Dir() string {
+	return s.dir
+}
 
-		name := rt.Name()
-		if !inStringSlice(names, name) {
-			names = append(names, name)
-		}
+// put data into storage.
+// if set pk value and over current max pk, use pk in data then auto increase.
+func (s *Storage) Put(value interface{}) error {
+	rt, e := getReflectType(value)
+	if e != nil {
+		return e
+	}
+	name := rt.Name()
+	sc, ok := s.schemaData[name]
+	if !ok {
+		return fmtError(ErrPutNoSchema, rt)
+	}
 
-		// get index
-		idx, ok := s.indexData[name]
-		if !ok {
-			return fmtError(ErrPutMissingSchema, rt)
-		}
+	data, e := struct2map(value)
+	if e != nil {
+		return e
+	}
 
-		// struct to map
-		data, err := struct2map(a)
-		if err != nil {
-			return err
-		}
-
-		// write to chunk
-		s.schemaData[name].Max++
-		data[s.schemaData[name].PK] = s.schemaData[name].Max
-		err = s.chunk.Put(name+strconv.Itoa(s.schemaData[name].Max), data)
-		if err != nil {
-			return err
-		}
-
-		// put into index
-		idx.Put(data, s.schemaData[name].Max)
-
-		// update raw data
-		err = map2struct(data, a)
-		if err != nil {
-			return err
+	// set or get pk value
+	pk := getMapPk(data, sc.PK)
+	if pk > sc.Max {
+		sc.Max = pk
+	} else {
+		sc.Max++
+		data[sc.PK] = sc.Max
+		pk = sc.Max
+		e2 := map2struct(data, value)
+		if e2 != nil {
+			return e2
 		}
 	}
 
-	// flush chunk
-	err := s.chunk.FlushCurrent()
-	if err != nil {
-		return err
+	// write chunk
+	e = s.chunk.Put(data, name+strconv.Itoa(pk))
+	if e != nil {
+		return e
+	}
+	e = s.chunk.FlushCurrent()
+	if e != nil {
+		return e
 	}
 
-	// flush idx
-	for _, n := range names {
-		err = s.indexData[n].Flush(s)
-		if err != nil {
-			return err
-		}
+	// write index
+	e = s.index.Put(sc, data, pk)
+	if e != nil {
+		return e
+	}
+	e = s.index.FlushCurrent()
+	if e != nil {
+		return e
 	}
 
-	// update schema
-	err = toJsonFile(s.schemaFile, s.schemaData)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return toJsonFile(s.schemaFile, s.schemaData)
 }
 
 // get data by pk value.
-// if found, assign data to passed interface value.
-func (s *Storage) Get(a interface{}) error {
-	rt, err := getStructPointer(a)
-	if err != nil {
-		return err
+// if no data, value is assigned to empty data.
+func (s *Storage) Get(value interface{}) error {
+	rt, e := getReflectType(value)
+	if e != nil {
+		return e
 	}
 	name := rt.Name()
-
-	if _, ok := s.schemaData[name]; !ok {
-		return fmtError(ErrGetMissingSchema, rt)
+	sc, ok := s.schemaData[name]
+	if !ok {
+		return fmtError(ErrPutNoSchema, rt)
 	}
 
-	data, err := struct2map(a)
-	if err != nil {
-		return err
+	data, e := struct2map(value)
+	if e != nil {
+		return e
 	}
 
-	pk := int(data[s.schemaData[name].PK].(float64))
+	// set or get pk value
+	pk := getMapPk(data, sc.PK)
 	if pk < 1 {
-		return fmtError(ErrGetPKInvalid, rt, pk)
-	}
 
-	_, result, err := s.chunk.Get(name + strconv.Itoa(pk))
-	if err != nil {
-		return err
 	}
-	if result == nil {
-		return ErrorNoData
+	_, result, e := s.chunk.Get(name + strconv.Itoa(pk))
+	if e != nil {
+		return e
 	}
-	tmp, err := struct2map(result)
-	if err != nil {
-		return err
-	}
-
-	return map2struct(tmp, a)
-}
-
-// register type to storage.
-// struct type will be used for schema.
-// if registered, it will be overwritten.
-func (s *Storage) Register(data ...interface{}) error {
-	for _, a := range data {
-		rt, err := getStructPointer(a)
-		if err != nil {
-			return err
+	if result != nil {
+		e = map2struct(result.(map[string]interface{}), value)
+		if e != nil {
+			return e
 		}
-		s.typeData[rt.Name()] = rt
-		s.schemaData[rt.Name()], err = NewSchema(rt)
-		if err != nil {
-			return err
-		}
-	}
-	err := toJsonFile(s.schemaFile, s.schemaData)
-	if err != nil {
-		return err
-	}
-	return s.bootstrap()
-}
-
-// check schema objects loaded.
-func (s *Storage) IsLoadSchema() bool {
-	return len(s.schemaData) > 0
-}
-
-func (s *Storage) bootstrap() error {
-	// read or create index
-	for name, schema := range s.schemaData {
-		if _, ok := s.indexData[name]; ok {
-			continue
-		}
-		idx, err := NewIndex(schema, s)
-		if err != nil {
-			return err
-		}
-		s.indexData[name] = idx
-	}
-
-	// read chunk
-	if s.chunk == nil {
-		var err error
-		if com.IsFile(path.Join(s.dir, "data1.dat")) {
-			s.chunk, err = ReadChunk(s.dir, CHUNK_SIZE)
-			if err != nil {
-				return err
-			}
-		} else {
-			s.chunk, err = NewChunk(s.dir, CHUNK_SIZE)
-			if err != nil {
-				return err
-			}
-		}
+	} else {
+		map2struct(map[string]interface{}{sc.PK: 0}, value)
 	}
 	return nil
 }
 
-// create new storage in directory.
-// it loads schemas, indexes and chunks.
-func NewStorage(dir string) (s *Storage, err error) {
+// register struct if not exist in storage.
+func (s *Storage) Register(value ...interface{}) error {
+	for _, v := range value {
+		rt, e := getReflectType(v)
+
+		// check schema existing
+		if _, ok := s.schemaData[rt.Name()]; ok {
+			continue
+		}
+		if e != nil {
+			return e
+		}
+		// create schema
+		s.schemaData[rt.Name()], e = NewSchema(rt)
+		if e != nil {
+			return e
+		}
+	}
+	return toJsonFile(s.schemaFile, s.schemaData)
+}
+
+// create new storage in dir.
+func NewStorage(dir string) (s *Storage, e error) {
 	if !com.IsDir(dir) {
-		err = os.MkdirAll(dir, os.ModePerm)
-		if err != nil {
+		e = os.MkdirAll(dir, os.ModePerm)
+		if e != nil {
 			return
 		}
 	}
-	s = &Storage{dir,
-		make(map[string]reflect.Type),
-		make(map[string]*Schema),
-		path.Join(dir, "schema.scm"),
-		make(map[string]*Index),
-		nil,
+	s = new(Storage)
+	s.dir = dir
+	s.schemaData = map[string]*Schema{}
+	s.schemaFile = path.Join(s.dir, "schema.scd")
+
+	// try to load schema
+	if com.IsFile(s.schemaFile) {
+		e = fromJsonFile(s.schemaFile, &s.schemaData)
+		if e != nil {
+			return
+		}
 	}
-	fromJsonFile(s.schemaFile, &s.schemaData)
-	if s.IsLoadSchema() {
-		err = s.bootstrap()
+
+	// create or load chunk
+	if !com.IsFile(path.Join(s.dir, "data1.dat")) {
+		s.chunk, e = NewChunk(s.dir)
+		if e != nil {
+			return
+		}
+	} else {
+		s.chunk, e = ReadChunk(s.dir)
+		if e != nil {
+			return
+		}
 	}
+
+	// create or load index
+	if !com.IsFile(path.Join(s.dir, "index1.idx")) {
+		s.index, e = NewIndex(s.dir)
+		if e != nil {
+			return
+		}
+	} else {
+		s.index, e = ReadIndex(s.dir)
+		if e != nil {
+			return
+		}
+	}
+
 	return
 }

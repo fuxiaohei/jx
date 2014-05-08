@@ -35,9 +35,7 @@ func insert() {
 func initStorage() {
 	s = nil
 	s, _ = NewStorage("test")
-	if !s.IsLoadSchema() {
-		s.Register(new(user))
-	}
+	s.Register(new(user))
 }
 
 func BenchmarkInsertData(b *testing.B) {
@@ -46,27 +44,6 @@ func BenchmarkInsertData(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		s.Put(insertUser)
-	}
-}
-
-func BenchmarkInsertDataEach(b *testing.B) {
-	b.StopTimer()
-	s_init(false)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		s.Put(insertUser)
-		s.Put(insertUser)
-		s.Put(insertUser)
-		s.Put(insertUser)
-	}
-}
-
-func BenchmarkInsertDataMulti(b *testing.B) {
-	b.StopTimer()
-	s_init(false)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		s.Put(insertUser, insertUser, insertUser, insertUser)
 	}
 }
 
