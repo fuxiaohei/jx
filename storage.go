@@ -4,6 +4,7 @@ import (
 	"github.com/Unknwon/com"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 )
 
@@ -77,6 +78,26 @@ func (s *Storage) Put(value interface{}) error {
 	return toJsonFile(s.schemaFile, s.schemaData)
 }
 
+// get data by pk int value.
+func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) error {
+	if pk < 1 {
+		return ErrorGetNoOk
+	}
+	_, result, e := s.chunk.Get(name + strconv.Itoa(pk))
+	if e != nil {
+		return e
+	}
+	if result != nil {
+		e = map2struct(result.(map[string]interface{}), value)
+		if e != nil {
+			return e
+		}
+	} else {
+		map2struct(map[string]interface{}{sc.PK: 0}, value)
+	}
+	return nil
+}
+
 // get data by pk value.
 // if no data, value is assigned to empty data.
 func (s *Storage) Get(value interface{}) error {
@@ -97,22 +118,47 @@ func (s *Storage) Get(value interface{}) error {
 
 	// set or get pk value
 	pk := getMapPk(data, sc.PK)
-	if pk < 1 {
+	return s.getByPk(sc, name, value, pk)
+}
 
-	}
-	_, result, e := s.chunk.Get(name + strconv.Itoa(pk))
+// get data by index value.
+// set the index field name to read the field in value interface.
+// if is max, use the one of max id in result to assign into value interface.
+// Otherwise, use min id one.
+func (s *Storage) GetBy(value interface{}, index string, isMax bool) error {
+	rt, e := getReflectType(value)
 	if e != nil {
 		return e
 	}
-	if result != nil {
-		e = map2struct(result.(map[string]interface{}), value)
-		if e != nil {
-			return e
-		}
-	} else {
-		map2struct(map[string]interface{}{sc.PK: 0}, value)
+	name := rt.Name()
+
+	sc, ok := s.schemaData[name]
+	if !ok {
+		return fmtError(ErrPutNoSchema, rt)
 	}
-	return nil
+
+	data, e := struct2map(value)
+	if e != nil {
+		return e
+	}
+
+	// find index result
+	rawResult := s.index.Get(name, index, data[index])
+	if len(rawResult) < 1 {
+		return nil
+	}
+	result, ok := s.index.toIntSlice(rawResult)
+	if !ok {
+		return nil
+	}
+	// sort index
+	if isMax {
+		sort.Sort(sort.Reverse(sort.IntSlice(result)))
+	} else {
+		sort.Sort(sort.IntSlice(result))
+	}
+	// get first one in result index
+	return s.getByPk(sc, name, value, result[0])
 }
 
 // register struct if not exist in storage.

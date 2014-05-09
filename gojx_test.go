@@ -1,13 +1,14 @@
 package gojx
 
 import (
+	"crypto/rand"
 	"os"
 	"testing"
 )
 
 var (
 	s          *Storage
-	insertUser *user
+	insertUser *user = &user{UserName: "user-name", Password: "123456", Email: "email-address"}
 )
 
 type user struct {
@@ -17,9 +18,18 @@ type user struct {
 	Email    string `jx:"index"`
 }
 
+func randomString(n int) string {
+	const alphanum = "abc"
+	var bytes = make([]byte, n)
+	rand.Read(bytes)
+	for i, b := range bytes {
+		bytes[i] = alphanum[b%byte(len(alphanum))]
+	}
+	return string(bytes)
+}
+
 func s_init(ins bool) {
 	os.RemoveAll("test")
-	insertUser = &user{0, "username", "password", "email"}
 	initStorage()
 	if ins {
 		insert()
@@ -28,7 +38,11 @@ func s_init(ins bool) {
 
 func insert() {
 	for i := 0; i < 999; i++ {
-		s.Put(insertUser)
+		u := new(user)
+		u.UserName = randomString(3)
+		u.Password = randomString(12)
+		u.Email = randomString(12)
+		s.Put(u)
 	}
 }
 
@@ -66,5 +80,16 @@ func BenchmarkGetPkInPreLoad(b *testing.B) {
 	u := &user{Id: 911}
 	for i := 0; i < b.N; i++ {
 		s.Get(u)
+	}
+}
+
+func BenchmarkGetByIndex(b *testing.B) {
+	b.StopTimer()
+	s_init(true)
+	initStorage()
+	b.StartTimer()
+	u := &user{UserName: "abc"}
+	for i := 0; i < b.N; i++ {
+		s.GetBy(u, "UserName", true)
 	}
 }

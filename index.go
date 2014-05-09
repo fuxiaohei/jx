@@ -84,20 +84,50 @@ func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
 	pkKey := idx.buildKey(sc.Name, "pk", "")
 	idx.putValue(pkKey, pk)
 
-
 	// write indexes pk
 	for _, idxName := range sc.Index {
 		key := idx.buildKey(sc.Name, idxName, data[idxName])
 		idx.putValue(key, pk)
-		key2 := idx.buildKey(sc.Name,idxName,"")
-		idx.putValue(key2,data[idxName])
+		key2 := idx.buildKey(sc.Name, idxName, "")
+		idx.putValue(key2, data[idxName])
 	}
 	return nil
+}
+
+// get index result slice by type name, field name and value.
+func (idx *Index) Get(name string, field string, value interface{}) (result []interface{}) {
+	key := idx.buildKey(name, field, value)
+	for _, m := range idx.raw {
+		if _, ok := m[key]; ok {
+			result = m[key].([]interface{})
+			return
+		}
+	}
+	return
 }
 
 // flush current index data map.
 func (idx *Index) FlushCurrent() error {
 	return toJsonFile(idx.getCursorFile(idx.writeC), idx.raw[idx.writeC])
+}
+
+// make interface slice to int slice.
+// it matches float64 type in json unmarshal types.
+func (idx *Index) toIntSlice(src []interface{}) (des []int, ok bool) {
+	if len(src) < 1 {
+		ok = false
+		return
+	}
+	_, ok = src[0].(float64)
+	if !ok {
+		return
+	}
+	des = make([]int, len(src))
+	for i, v := range src {
+		des[i] = int(v.(float64))
+	}
+	ok = true
+	return
 }
 
 // create new index with dir.
