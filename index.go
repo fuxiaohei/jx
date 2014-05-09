@@ -84,10 +84,13 @@ func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
 	pkKey := idx.buildKey(sc.Name, "pk", "")
 	idx.putValue(pkKey, pk)
 
-	// write indexes
+
+	// write indexes pk
 	for _, idxName := range sc.Index {
 		key := idx.buildKey(sc.Name, idxName, data[idxName])
 		idx.putValue(key, pk)
+		key2 := idx.buildKey(sc.Name,idxName,"")
+		idx.putValue(key2,data[idxName])
 	}
 	return nil
 }
