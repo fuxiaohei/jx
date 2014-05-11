@@ -23,20 +23,25 @@ func (s *Storage) Dir() string {
 	return s.dir
 }
 
-// put data into storage.
-// if set pk value and over current max pk, use pk in data then auto increase.
-func (s *Storage) Put(value interface{}) error {
+func (s *Storage) parseValue(value interface{}) (sc *Schema, data map[string]interface{}, e error) {
 	rt, e := getReflectType(value)
 	if e != nil {
-		return e
+		return
 	}
 	name := rt.Name()
 	sc, ok := s.schemaData[name]
 	if !ok {
-		return fmtError(ErrPutNoSchema, rt)
+		e = fmtError(ErrPutNoSchema, rt)
 	}
 
-	data, e := struct2map(value)
+	data, e = struct2map(value)
+	return
+}
+
+// put data into storage.
+// if set pk value and over current max pk, use pk in data then auto increase.
+func (s *Storage) Put(value interface{}) error {
+	sc, data, e := s.parseValue(value)
 	if e != nil {
 		return e
 	}
@@ -56,7 +61,7 @@ func (s *Storage) Put(value interface{}) error {
 	}
 
 	// write chunk
-	e = s.chunk.Put(data, name+strconv.Itoa(pk))
+	e = s.chunk.Put(data, sc.Name+strconv.Itoa(pk))
 	if e != nil {
 		return e
 	}
@@ -81,7 +86,7 @@ func (s *Storage) Put(value interface{}) error {
 // get data by pk int value.
 func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) error {
 	if pk < 1 {
-		return ErrorGetNoOk
+		return ErrorGetNoPk
 	}
 	_, result, e := s.chunk.Get(name + strconv.Itoa(pk))
 	if e != nil {
@@ -94,6 +99,7 @@ func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) er
 		}
 	} else {
 		map2struct(map[string]interface{}{sc.PK: 0}, value)
+		return ErrorNoData
 	}
 	return nil
 }
@@ -101,49 +107,21 @@ func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) er
 // get data by pk value.
 // if no data, value is assigned to empty data.
 func (s *Storage) Get(value interface{}) error {
-	rt, e := getReflectType(value)
-	if e != nil {
-		return e
-	}
-	name := rt.Name()
-	sc, ok := s.schemaData[name]
-	if !ok {
-		return fmtError(ErrPutNoSchema, rt)
-	}
-
-	data, e := struct2map(value)
+	sc, data, e := s.parseValue(value)
 	if e != nil {
 		return e
 	}
 
 	// set or get pk value
 	pk := getMapPk(data, sc.PK)
-	return s.getByPk(sc, name, value, pk)
+	return s.getByPk(sc, sc.Name, value, pk)
 }
 
 // get data by index value.
-// set the index field name to read the field in value interface.
-// if is max, use the one of max id in result to assign into value interface.
-// Otherwise, use min id one.
-func (s *Storage) GetBy(value interface{}, index string, isMax bool) error {
-	rt, e := getReflectType(value)
-	if e != nil {
-		return e
-	}
-	name := rt.Name()
-
-	sc, ok := s.schemaData[name]
-	if !ok {
-		return fmtError(ErrPutNoSchema, rt)
-	}
-
-	data, e := struct2map(value)
-	if e != nil {
-		return e
-	}
+func (s *Storage) getByIndex(sc *Schema, value interface{}, name string, index string, indexValue interface{}, isMax bool) error {
 
 	// find index result
-	rawResult := s.index.Get(name, index, data[index])
+	_, rawResult := s.index.Get(name, index, indexValue)
 	if len(rawResult) < 1 {
 		return nil
 	}
@@ -159,6 +137,55 @@ func (s *Storage) GetBy(value interface{}, index string, isMax bool) error {
 	}
 	// get first one in result index
 	return s.getByPk(sc, name, value, result[0])
+}
+
+func (s *Storage) Update(value interface{}) error {
+	sc, newData, e := s.parseValue(value)
+	if e != nil {
+		return e
+	}
+
+	// get old data
+	pk := getMapPk(newData, sc.PK)
+	key := sc.Name + strconv.Itoa(pk)
+	_, oldData, e := s.chunk.Get(key)
+
+	// update index
+	e = s.index.Update(sc, oldData.(map[string]interface{}), newData, pk)
+	if e != nil {
+		return e
+	}
+
+	// update chunk
+	c, e := s.chunk.Update(newData, key)
+	if e != nil {
+		return e
+	}
+
+	// flush files
+	e = s.index.FlushChange()
+	if e != nil {
+		return e
+	}
+	e = s.chunk.FlushChunk(c)
+	if e != nil {
+		return e
+	}
+	return nil
+}
+
+// get data by index value.
+// set the index field name to read the field in value interface.
+// if is max, use the one of max id in result to assign into value interface.
+// Otherwise, use min id one.
+func (s *Storage) GetBy(value interface{}, index string, isMax bool) error {
+	sc, data, e := s.parseValue(value)
+	if e != nil {
+		return e
+	}
+
+	return s.getByIndex(sc, value, sc.Name, index, data[index], isMax)
+
 }
 
 // register struct if not exist in storage.

@@ -10,9 +10,10 @@ type Chunk struct {
 	dir string
 
 	readC, writeC int
+	changeC []int
 
-	raw map[int]map[string]interface{} // raw data in chunks
-	cache map[string]int // key / chunk cursor map cache
+	raw   map[int]map[string]interface{} // raw data in chunks
+	cache map[string]int                 // key / chunk cursor map cache
 
 	size int
 }
@@ -73,6 +74,21 @@ func (c *Chunk) Put(data interface{}, key string) error {
 	return nil
 }
 
+// update data in chunk with key string.
+// try to find the data. If not exist, return error.
+// then update data in chunk, return cursor int.
+// it doesn't write file.
+// use Chunk.FlushChunk(cursor) to write into file.
+func (c *Chunk) Update(data interface{}, key string) (int, error) {
+	// try to find it, not no it, do not update
+	i, _, e := c.Get(key)
+	if e != nil {
+		return 0, e
+	}
+	c.raw[i][key] = data
+	return i, nil
+}
+
 // find data in memory data by key.
 // it depends the loaded chunks data.
 func (c *Chunk) findInMem(key string) (cursor int, data interface{}) {
@@ -116,7 +132,7 @@ func (c *Chunk) findInPrev(key string) (cursor int, data interface{}, e error) {
 func (c *Chunk) findInCache(key string) (cursor int, data interface{}) {
 	cursor = c.cache[key]
 	// if chunk is not load, return nil. then call c.findInPrev(key) to find in no-loaded prev chunks.
-	if _,ok:=c.raw[cursor];!ok{
+	if _, ok := c.raw[cursor]; !ok {
 		return
 	}
 	if cursor > 0 {
@@ -150,6 +166,7 @@ func NewChunk(dir string) (c *Chunk, e error) {
 	c.raw[c.writeC] = map[string]interface{}{}
 	c.size = CHUNK_SIZE
 	c.cache = map[string]int{}
+	c.changeC = []int{}
 	e = c.FlushChunk(c.writeC)
 	return
 }
@@ -162,6 +179,7 @@ func ReadChunk(dir string) (c *Chunk, e error) {
 	c.dir = dir
 	c.size = CHUNK_SIZE
 	c.cache = map[string]int{}
+	c.changeC = []int{}
 	for {
 		if !com.IsFile(c.getCursorFile(i)) {
 			break

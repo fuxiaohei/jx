@@ -64,3 +64,14 @@ func map2struct(tmp map[string]interface{}, data interface{}) error {
 	}
 	return json.Unmarshal(jsonBytes, data)
 }
+
+func isInIntSlice(src []int, value int) (i int, b bool) {
+	for k, v := range src {
+		if v == value {
+			i = k
+			b = true
+			return
+		}
+	}
+	return
+}

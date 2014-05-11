@@ -12,7 +12,8 @@ var (
 	ErrorNeedField   = errors.New("need struct fields")
 	ErrorNeedPKInt   = errors.New("need pk int type")
 	ErrorFlushNull   = errors.New("flush null or no-load chunk")
-	ErrorGetNoOk     = errors.New("get 0 pk value")
+	ErrorGetNoPk     = errors.New("get 0 pk value")
+	ErrorNoData      = errors.New("no data")
 
 	ErrPutNoSchema = "put no schema type '%s'"
 )

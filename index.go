@@ -8,10 +8,11 @@ import (
 )
 
 type Index struct {
-	raw    map[int]map[string]interface{}
-	writeC int
-	dir    string
-	size   int
+	raw     map[int]map[string]interface{}
+	writeC  int
+	dir     string
+	size    int
+	changeC []int
 }
 
 // get index cursor string.
@@ -69,6 +70,13 @@ func (idx *Index) putValue(key string, v interface{}) {
 	}
 }
 
+func (idx *Index) assignChange(i int) {
+	_, ok := isInIntSlice(idx.changeC, i)
+	if !ok {
+		idx.changeC = append(idx.changeC, i)
+	}
+}
+
 // put data into indexes with pk and schema.
 // it writes indexes in memory.
 // use Index.FlushCurrent() to flush files.
@@ -94,12 +102,30 @@ func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
 	return nil
 }
 
+func (idx *Index) Update(sc *Schema, oldData, newData map[string]interface{}, pkInt int) error {
+	pk := float64(pkInt)
+	for _, idxName := range sc.Index {
+		// if value is same, do not change index
+		if oldData[idxName] == newData[idxName] {
+			continue
+		}
+		// remove pk in old data index
+		cursor, _ := idx.removeInIndex(sc.Name, idxName, oldData[idxName], pk)
+		idx.assignChange(cursor)
+		// add pk to new data index
+		cursor, _ = idx.addInIndex(sc.Name, idxName, newData[idxName], pk)
+		idx.assignChange(cursor)
+	}
+	return nil
+}
+
 // get index result slice by type name, field name and value.
-func (idx *Index) Get(name string, field string, value interface{}) (result []interface{}) {
+func (idx *Index) Get(name string, field string, value interface{}) (cursor int, result []interface{}) {
 	key := idx.buildKey(name, field, value)
-	for _, m := range idx.raw {
+	for i, m := range idx.raw {
 		if _, ok := m[key]; ok {
 			result = m[key].([]interface{})
+			cursor = i
 			return
 		}
 	}
@@ -109,6 +135,17 @@ func (idx *Index) Get(name string, field string, value interface{}) (result []in
 // flush current index data map.
 func (idx *Index) FlushCurrent() error {
 	return toJsonFile(idx.getCursorFile(idx.writeC), idx.raw[idx.writeC])
+}
+
+// flush changed index to file.
+func (idx *Index) FlushChange() error {
+	for _, i := range idx.changeC {
+		e := toJsonFile(idx.getCursorFile(i), idx.raw[i])
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // make interface slice to int slice.
@@ -130,12 +167,50 @@ func (idx *Index) toIntSlice(src []interface{}) (des []int, ok bool) {
 	return
 }
 
+func (idx *Index) removeInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
+	cursor, index := idx.Get(name, field, value)
+	key := idx.buildKey(name, field, value)
+	if cursor < 1 || len(index) < 1 {
+		return 0, nil
+	}
+	for i, v := range index {
+		if v == pk {
+			index = append(index[:i], index[i+1:]...)
+			idx.raw[cursor][key] = index
+			return cursor, index
+		}
+	}
+	return cursor, index
+}
+
+func (idx *Index) addInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
+	cursor, index := idx.Get(name, field, value)
+	key := idx.buildKey(name, field, value)
+	if cursor < 1 || len(index) < 1 {
+		// add new index
+		cursor = idx.writeC
+		index = []interface{}{pk}
+		idx.raw[cursor][key] = index
+		// add index value
+		key2 := idx.buildKey(name, field, "")
+		tmp := idx.raw[cursor][key2].([]interface {})
+		tmp = append(tmp,value)
+		idx.raw[cursor][key2] = tmp
+	} else {
+		index = idx.raw[cursor][key].([]interface{})
+		index = append(index, pk)
+		idx.raw[cursor][key] = index
+	}
+	return cursor, index
+}
+
 // create new index with dir.
 func NewIndex(dir string) (idx *Index, e error) {
 	idx = new(Index)
 	idx.dir = dir
 	idx.writeC = 1
 	idx.size = INDEX_SIZE
+	idx.changeC = []int{}
 	idx.raw = make(map[int]map[string]interface{})
 	idx.raw[idx.writeC] = make(map[string]interface{})
 	e = toJsonFile(path.Join(idx.dir, idx.getCursor(idx.writeC)), idx.raw[idx.writeC])
@@ -150,6 +225,7 @@ func ReadIndex(dir string) (idx *Index, e error) {
 	idx = new(Index)
 	idx.dir = dir
 	idx.size = INDEX_SIZE
+	idx.changeC = []int{}
 	for {
 		if !com.IsFile(idx.getCursorFile(i)) {
 			break
