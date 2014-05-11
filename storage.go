@@ -139,6 +139,9 @@ func (s *Storage) getByIndex(sc *Schema, value interface{}, name string, index s
 	return s.getByPk(sc, name, value, result[0])
 }
 
+// update data by data pk value.
+// it tries to get old data by pk. if not exist, return error.
+// then update index and chunk.
 func (s *Storage) Update(value interface{}) error {
 	sc, newData, e := s.parseValue(value)
 	if e != nil {
@@ -149,6 +152,9 @@ func (s *Storage) Update(value interface{}) error {
 	pk := getMapPk(newData, sc.PK)
 	key := sc.Name + strconv.Itoa(pk)
 	_, oldData, e := s.chunk.Get(key)
+	if e != nil {
+		return e
+	}
 
 	// update index
 	e = s.index.Update(sc, oldData.(map[string]interface{}), newData, pk)

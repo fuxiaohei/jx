@@ -75,3 +75,14 @@ func isInIntSlice(src []int, value int) (i int, b bool) {
 	}
 	return
 }
+
+func isInInterfaceSlice(src []interface{}, value interface{}) (i int, b bool) {
+	for k, v := range src {
+		if v == value {
+			i = k
+			b = true
+			return
+		}
+	}
+	return
+}

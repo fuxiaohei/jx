@@ -70,6 +70,8 @@ func (idx *Index) putValue(key string, v interface{}) {
 	}
 }
 
+// assign cursor to changeC.
+// use for Index.FluchChange().
 func (idx *Index) assignChange(i int) {
 	_, ok := isInIntSlice(idx.changeC, i)
 	if !ok {
@@ -102,6 +104,10 @@ func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
 	return nil
 }
 
+// update index with old and new data map.
+// if same value in old and new data, do not change index.
+// or remove index by old data, add index by new data.
+// it changes in memory, please use index.FlushChange() to write changing index file.
 func (idx *Index) Update(sc *Schema, oldData, newData map[string]interface{}, pkInt int) error {
 	pk := float64(pkInt)
 	for _, idxName := range sc.Index {
@@ -167,6 +173,9 @@ func (idx *Index) toIntSlice(src []interface{}) (des []int, ok bool) {
 	return
 }
 
+// remove pk in data index.
+// if index is empty or null, return nil.
+// otherwise, return changed index slice.
 func (idx *Index) removeInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
 	cursor, index := idx.Get(name, field, value)
 	key := idx.buildKey(name, field, value)
@@ -183,6 +192,8 @@ func (idx *Index) removeInIndex(name string, field string, value interface{}, pk
 	return cursor, index
 }
 
+// add pk into data index.
+// if index is null, create index for new data value.
 func (idx *Index) addInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
 	cursor, index := idx.Get(name, field, value)
 	key := idx.buildKey(name, field, value)
