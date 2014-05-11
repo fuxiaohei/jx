@@ -93,3 +93,18 @@ func BenchmarkGetByIndex(b *testing.B) {
 		s.GetBy(u, "UserName", true)
 	}
 }
+
+func BenchmarkUpdate(b *testing.B) {
+	b.StopTimer()
+	s_init(true)
+	initStorage()
+	u := new(user)
+	u.Id = 911
+	u.UserName = randomString(3)
+	u.Password = randomString(12)
+	u.Email = randomString(12)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		s.Update(u)
+	}
+}

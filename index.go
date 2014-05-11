@@ -204,9 +204,7 @@ func (idx *Index) addInIndex(name string, field string, value interface{}, pk in
 		idx.raw[cursor][key] = index
 		// add index value
 		key2 := idx.buildKey(name, field, "")
-		tmp := idx.raw[cursor][key2].([]interface {})
-		tmp = append(tmp,value)
-		idx.raw[cursor][key2] = tmp
+		idx.putValue(key2, value)
 	} else {
 		index = idx.raw[cursor][key].([]interface{})
 		index = append(index, pk)
