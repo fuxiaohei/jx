@@ -42,7 +42,7 @@ func insert() {
 		u.UserName = randomString(3)
 		u.Password = randomString(12)
 		u.Email = randomString(12)
-		s.Put(u)
+		s.Insert(u)
 	}
 }
 
@@ -57,7 +57,7 @@ func BenchmarkInsertData(b *testing.B) {
 	s_init(false)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		s.Put(insertUser)
+		s.Insert(insertUser)
 	}
 }
 
@@ -68,7 +68,7 @@ func BenchmarkGetPkInDelayLoad(b *testing.B) {
 	b.StartTimer()
 	u := &user{Id: 9}
 	for i := 0; i < b.N; i++ {
-		s.Get(u)
+		s.Insert(u)
 	}
 }
 
@@ -79,7 +79,7 @@ func BenchmarkGetPkInPreLoad(b *testing.B) {
 	b.StartTimer()
 	u := &user{Id: 911}
 	for i := 0; i < b.N; i++ {
-		s.Get(u)
+		s.Select(u)
 	}
 }
 
@@ -90,7 +90,7 @@ func BenchmarkGetByIndex(b *testing.B) {
 	b.StartTimer()
 	u := &user{UserName: "abc"}
 	for i := 0; i < b.N; i++ {
-		s.GetBy(u, "UserName", true)
+		s.SelectBy(u, "UserName", true)
 	}
 }
 

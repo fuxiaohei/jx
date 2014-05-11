@@ -71,7 +71,7 @@ func (idx *Index) putValue(key string, v interface{}) {
 }
 
 // assign cursor to changeC.
-// use for Index.FluchChange().
+// use for Index.FlushChange().
 func (idx *Index) assignChange(i int) {
 	_, ok := isInIntSlice(idx.changeC, i)
 	if !ok {
@@ -82,7 +82,7 @@ func (idx *Index) assignChange(i int) {
 // put data into indexes with pk and schema.
 // it writes indexes in memory.
 // use Index.FlushCurrent() to flush files.
-func (idx *Index) Put(sc *Schema, data map[string]interface{}, pk int) error {
+func (idx *Index) Insert(sc *Schema, data map[string]interface{}, pk int) error {
 	if idx.isCurrentFull() {
 		e := idx.moveWriteNext()
 		if e != nil {
@@ -126,7 +126,7 @@ func (idx *Index) Update(sc *Schema, oldData, newData map[string]interface{}, pk
 }
 
 // get index result slice by type name, field name and value.
-func (idx *Index) Get(name string, field string, value interface{}) (cursor int, result []interface{}) {
+func (idx *Index) Select(name string, field string, value interface{}) (cursor int, result []interface{}) {
 	key := idx.buildKey(name, field, value)
 	for i, m := range idx.raw {
 		if _, ok := m[key]; ok {
@@ -177,7 +177,7 @@ func (idx *Index) toIntSlice(src []interface{}) (des []int, ok bool) {
 // if index is empty or null, return nil.
 // otherwise, return changed index slice.
 func (idx *Index) removeInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
-	cursor, index := idx.Get(name, field, value)
+	cursor, index := idx.Select(name, field, value)
 	key := idx.buildKey(name, field, value)
 	if cursor < 1 || len(index) < 1 {
 		return 0, nil
@@ -195,7 +195,7 @@ func (idx *Index) removeInIndex(name string, field string, value interface{}, pk
 // add pk into data index.
 // if index is null, create index for new data value.
 func (idx *Index) addInIndex(name string, field string, value interface{}, pk interface{}) (int, []interface{}) {
-	cursor, index := idx.Get(name, field, value)
+	cursor, index := idx.Select(name, field, value)
 	key := idx.buildKey(name, field, value)
 	if cursor < 1 || len(index) < 1 {
 		// add new index

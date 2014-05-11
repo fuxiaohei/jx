@@ -63,7 +63,7 @@ func (c *Chunk) FlushCurrent() error {
 // if current chunk is full, move to next then insert.
 // it can't write file immediately.
 // use Chunk.FlushCurrent() to sync current writing chunk.
-func (c *Chunk) Put(data interface{}, key string) error {
+func (c *Chunk) Insert(data interface{}, key string) error {
 	if c.isCurrentFull() {
 		e := c.moveWriteNext()
 		if e != nil {
@@ -81,7 +81,7 @@ func (c *Chunk) Put(data interface{}, key string) error {
 // use Chunk.FlushChunk(cursor) to write into file.
 func (c *Chunk) Update(data interface{}, key string) (int, error) {
 	// try to find it, not no it, do not update
-	i, _, e := c.Get(key)
+	i, _, e := c.Select(key)
 	if e != nil {
 		return 0, e
 	}
@@ -145,7 +145,7 @@ func (c *Chunk) findInCache(key string) (cursor int, data interface{}) {
 // find in cache map first.
 // then find in memory map.
 // last find in prev chunks.
-func (c *Chunk) Get(key string) (cursor int, data interface{}, e error) {
+func (c *Chunk) Select(key string) (cursor int, data interface{}, e error) {
 	cursor, data = c.findInCache(key)
 	if data != nil && cursor > 0 {
 		return

@@ -23,6 +23,8 @@ func (s *Storage) Dir() string {
 	return s.dir
 }
 
+// parse input value.
+// find schema then change to map data.
 func (s *Storage) parseValue(value interface{}) (sc *Schema, data map[string]interface{}, e error) {
 	rt, e := getReflectType(value)
 	if e != nil {
@@ -40,7 +42,7 @@ func (s *Storage) parseValue(value interface{}) (sc *Schema, data map[string]int
 
 // put data into storage.
 // if set pk value and over current max pk, use pk in data then auto increase.
-func (s *Storage) Put(value interface{}) error {
+func (s *Storage) Insert(value interface{}) error {
 	sc, data, e := s.parseValue(value)
 	if e != nil {
 		return e
@@ -61,7 +63,7 @@ func (s *Storage) Put(value interface{}) error {
 	}
 
 	// write chunk
-	e = s.chunk.Put(data, sc.Name+strconv.Itoa(pk))
+	e = s.chunk.Insert(data, sc.Name+strconv.Itoa(pk))
 	if e != nil {
 		return e
 	}
@@ -71,7 +73,7 @@ func (s *Storage) Put(value interface{}) error {
 	}
 
 	// write index
-	e = s.index.Put(sc, data, pk)
+	e = s.index.Insert(sc, data, pk)
 	if e != nil {
 		return e
 	}
@@ -88,7 +90,7 @@ func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) er
 	if pk < 1 {
 		return ErrorGetNoPk
 	}
-	_, result, e := s.chunk.Get(name + strconv.Itoa(pk))
+	_, result, e := s.chunk.Select(name + strconv.Itoa(pk))
 	if e != nil {
 		return e
 	}
@@ -106,7 +108,7 @@ func (s *Storage) getByPk(sc *Schema, name string, value interface{}, pk int) er
 
 // get data by pk value.
 // if no data, value is assigned to empty data.
-func (s *Storage) Get(value interface{}) error {
+func (s *Storage) Select(value interface{}) error {
 	sc, data, e := s.parseValue(value)
 	if e != nil {
 		return e
@@ -121,7 +123,7 @@ func (s *Storage) Get(value interface{}) error {
 func (s *Storage) getByIndex(sc *Schema, value interface{}, name string, index string, indexValue interface{}, isMax bool) error {
 
 	// find index result
-	_, rawResult := s.index.Get(name, index, indexValue)
+	_, rawResult := s.index.Select(name, index, indexValue)
 	if len(rawResult) < 1 {
 		return nil
 	}
@@ -139,6 +141,20 @@ func (s *Storage) getByIndex(sc *Schema, value interface{}, name string, index s
 	return s.getByPk(sc, name, value, result[0])
 }
 
+// get data by index value.
+// set the index field name to read the field in value interface.
+// if is max, use the one of max id in result to assign into value interface.
+// Otherwise, use min id one.
+func (s *Storage) SelectBy(value interface{}, index string, isMax bool) error {
+	sc, data, e := s.parseValue(value)
+	if e != nil {
+		return e
+	}
+
+	return s.getByIndex(sc, value, sc.Name, index, data[index], isMax)
+
+}
+
 // update data by data pk value.
 // it tries to get old data by pk. if not exist, return error.
 // then update index and chunk.
@@ -151,7 +167,7 @@ func (s *Storage) Update(value interface{}) error {
 	// get old data
 	pk := getMapPk(newData, sc.PK)
 	key := sc.Name + strconv.Itoa(pk)
-	_, oldData, e := s.chunk.Get(key)
+	_, oldData, e := s.chunk.Select(key)
 	if e != nil {
 		return e
 	}
@@ -180,18 +196,9 @@ func (s *Storage) Update(value interface{}) error {
 	return nil
 }
 
-// get data by index value.
-// set the index field name to read the field in value interface.
-// if is max, use the one of max id in result to assign into value interface.
-// Otherwise, use min id one.
-func (s *Storage) GetBy(value interface{}, index string, isMax bool) error {
-	sc, data, e := s.parseValue(value)
-	if e != nil {
-		return e
-	}
+func (s *Storage) Delete(value interface {})error{
 
-	return s.getByIndex(sc, value, sc.Name, index, data[index], isMax)
-
+	return nil
 }
 
 // register struct if not exist in storage.
