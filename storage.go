@@ -153,6 +153,9 @@ func (s *Storage) Update(v interface{}) (e error) {
 	if e != nil {
 		return
 	}
+	if oldV.IsNil() {
+		return ErrorNoData
+	}
 	e = s.table[name].Update(pk, i, oldV.Elem(), rv)
 	return
 }
