@@ -1,68 +1,56 @@
 package gojx
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"reflect"
+	"strings"
 )
 
-func getReflectType(a interface{}) (rt reflect.Type, e error) {
+func getReflectType(a interface{}) (rt reflect.Type, name string, e error) {
 	rt = reflect.TypeOf(a)
 	if rt.Kind() != reflect.Ptr {
-		e = ErrorNeedPointer
+		e = fmtError(ErrStrStructNeedPointer, rt)
 		return
 	}
 	rt = rt.Elem()
+	name = strings.ToLower(fmt.Sprint(rt))
 	if rt.Kind() != reflect.Struct {
-		e = ErrorNeedPointer
+		e = fmtError(ErrStrStructNeedPointer, rt)
 		return
 	}
 	return
 }
 
-func getMapPk(data map[string]interface{}, pk string) int {
-	return int(data[pk].(float64))
-}
-
-func fmtError(msg string, a ...interface{}) error {
-	return errors.New(fmt.Sprintf(msg, a...))
-}
-
-func toJsonFile(file string, data interface{}) error {
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		return err
+func getReflect(a interface{}) (rv reflect.Value, rt reflect.Type, name string, e error) {
+	rv = reflect.ValueOf(a)
+	if rv.Kind() != reflect.Ptr {
+		e = fmtError(ErrStrStructNeedPointer, rv.Type())
+		return
 	}
-	return ioutil.WriteFile(file, jsonBytes, os.ModePerm)
+	rv = rv.Elem()
+	rt = rv.Type()
+	name = strings.ToLower(fmt.Sprint(rt))
+	if rt.Kind() != reflect.Struct {
+		e = fmtError(ErrStrStructNeedPointer, rt)
+		return
+	}
+	return
 }
 
-func fromJsonFile(file string, data interface{}) error {
-	fileBytes, err := ioutil.ReadFile(file)
-	if err != nil {
-		return err
+func getReflectFieldValue(rv reflect.Value, fieldName string) interface{} {
+	rf := rv.FieldByName(fieldName)
+	if !rf.IsValid() {
+		return nil
 	}
-	return json.Unmarshal(fileBytes, data)
+	return rf.Interface()
 }
 
-func struct2map(data interface{}) (map[string]interface{}, error) {
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
+func setReflectField(rv reflect.Value, fieldName string, v interface{}) {
+	rf := rv.FieldByName(fieldName)
+	if !rf.IsValid() {
+		return
 	}
-	var tmp map[string]interface{}
-	err = json.Unmarshal(jsonBytes, &tmp)
-	return tmp, err
-}
-
-func map2struct(tmp map[string]interface{}, data interface{}) error {
-	jsonBytes, err := json.Marshal(tmp)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(jsonBytes, data)
+	rf.Set(reflect.ValueOf(v))
 }
 
 func isInIntSlice(src []int, value int) (i int, b bool) {

@@ -1,19 +1,30 @@
 package gojx
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 const (
-	CHUNK_SIZE = 100
-	INDEX_SIZE = 1000
+	MAPPER_JSON = "JSON"
 )
 
 var (
-	ErrorNeedPointer = errors.New("need struct pointer")
-	ErrorNeedField   = errors.New("need struct fields")
-	ErrorNeedPKInt   = errors.New("need pk int type")
-	ErrorFlushNull   = errors.New("flush null or no-load chunk")
-	ErrorGetNoPk     = errors.New("get 0 pk value")
-	ErrorNoData      = errors.New("no data")
+	ErrStrSaverUnknown      = "unknown saver '%s'"
+	ErrStrStructNeedPointer = "register '%s' need struct pointer"
+	ErrStrStructNeedField   = "struct '%s' need field"
+	ErrStrStructPkNeedInt   = "struct '%s' pk field '%d' need int type"
+	ErrStrStructPkZero      = "struct '%s' pk field < 1"
 
-	ErrPutNoSchema = "put no schema type '%s'"
+	ErrStrSchemaUnknown = "unknown schema '%s'"
+
+	ErrStrUpdateNullData = "update null '%s' with pk '%d'"
+
+
+
+	ErrorNoData = errors.New("no data")
 )
+
+func fmtError(msg string, a ...interface{}) error {
+	return errors.New(fmt.Sprintf(msg, a...))
+}
