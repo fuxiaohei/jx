@@ -21,8 +21,7 @@ var (
 	ErrStrUpdateNullData = "update null '%s' with pk '%d'"
 
 
-
-	ErrorNoData = errors.New("no data")
+	ErrorNoData = errors.New("no data") // no data error
 )
 
 func fmtError(msg string, a ...interface{}) error {

@@ -24,6 +24,7 @@ func NewSchema(rt reflect.Type, size int) (sc *Schema, e error) {
 	sc.Index = []string{}
 	sc.ChunkSize = size
 
+	// parse fields
 	for i := 0; i < numField; i++ {
 		field := rt.Field(i)
 		tag := field.Tag.Get("jx")

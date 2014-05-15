@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+// table provides indexes and chunks methods for each schema type value.
 type Table struct {
 	name      string
 	directory string
@@ -21,6 +22,7 @@ type Table struct {
 	chunk *Chunk
 }
 
+// put reflect.Value to table.
 func (t *Table) Put(rv reflect.Value, pk int) (e error) {
 
 	// add to chunk
@@ -49,11 +51,15 @@ func (t *Table) Put(rv reflect.Value, pk int) (e error) {
 	return
 }
 
+// get interface value by pk int.
 func (t *Table) Get(pk int) (i int, v interface{}, e error) {
 	i, v, e = t.chunk.Get(strconv.Itoa(pk))
 	return
 }
 
+// update value by pk.
+// it update indexess by reflect.Value and new value's reflect.Value.
+// and update chunk value by cursor and pk int.
 func (t *Table) Update(pk int, cursor int, rv reflect.Value, nrv reflect.Value) (e error) {
 	// write to chunk
 	t.chunk.Update(cursor, strconv.Itoa(pk), nrv.Interface())
@@ -79,11 +85,13 @@ func (t *Table) Update(pk int, cursor int, rv reflect.Value, nrv reflect.Value) 
 	return
 }
 
-func (t *Table) Delete(pk int,cursor int,rv reflect.Value)(e error){
+// delete value by pk.
+// it deletes indexes by reflect.Value.
+func (t *Table) Delete(pk int, cursor int, rv reflect.Value) (e error) {
 	// delete index
-	for name,idx := range t.valueIndex{
-		key := fmt.Sprintf("%v",getReflectFieldValue(rv,name))
-		idx.Del(key,pk)
+	for name, idx := range t.valueIndex {
+		key := fmt.Sprintf("%v", getReflectFieldValue(rv, name))
+		idx.Del(key, pk)
 		e = idx.Flush()
 		if e != nil {
 			return
@@ -93,16 +101,17 @@ func (t *Table) Delete(pk int,cursor int,rv reflect.Value)(e error){
 	// delete pk
 	t.pkIndex.Del(pk)
 	e = t.pkIndex.Flush()
-	if e != nil{
+	if e != nil {
 		return
 	}
 
 	// delete in chunk
-	t.chunk.Del(cursor,strconv.Itoa(pk))
+	t.chunk.Del(cursor, strconv.Itoa(pk))
 	e = t.chunk.flushChunk(cursor)
 	return
 }
 
+// create or read table in directory with schema.
 func NewTable(name string, directory string, sc *Schema, s Mapper) (t *Table, e error) {
 	if !com.IsDir(directory) {
 		if e = os.MkdirAll(directory, os.ModePerm); e != nil {

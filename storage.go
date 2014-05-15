@@ -7,6 +7,7 @@ import (
 	"reflect"
 )
 
+// Storage manages indexes, chunks and schema.
 type Storage struct {
 	directory string
 
@@ -18,6 +19,7 @@ type Storage struct {
 	saver Mapper
 }
 
+// bootstrap storage, read indexes, chunks and schema.
 func (s *Storage) bootstrap() (e error) {
 	if com.IsFile(s.schemaFile) {
 		// load schema first
@@ -41,10 +43,13 @@ func (s *Storage) bootstrap() (e error) {
 	return
 }
 
+// flush schema data fo file.
 func (s *Storage) flushSchema() error {
 	return s.saver.ToFile(s.schemaFile, s.schema)
 }
 
+// register struct to schema.
+// size means the chunk size for this schema data.
 func (s *Storage) Register(v interface{}, size int) (e error) {
 	rt, name, e := getReflectType(v)
 	// check schema existing
@@ -67,6 +72,9 @@ func (s *Storage) Register(v interface{}, size int) (e error) {
 	return s.flushSchema()
 }
 
+// put value to storage.
+// the type of value need be registered.
+// if pk is over schema max, use pk in value.
 func (s *Storage) Put(v interface{}) (e error) {
 	rv, _, name, e := getReflect(v)
 	if e != nil {
@@ -84,6 +92,7 @@ func (s *Storage) Put(v interface{}) (e error) {
 	return s.flushSchema()
 }
 
+// get value by pk
 func (s *Storage) Get(v interface{}) (e error) {
 	rv, _, name, e := getReflect(v)
 	if e != nil {
@@ -108,6 +117,7 @@ func (s *Storage) Get(v interface{}) (e error) {
 	return
 }
 
+// get reflect.Value by pk and type name.
 func (s *Storage) getValue(pk int, name string, rt reflect.Type) (i int, rv reflect.Value, e error) {
 	rv = reflect.New(rt)
 	i, res, e := s.table[name].Get(pk)
@@ -122,6 +132,7 @@ func (s *Storage) getValue(pk int, name string, rt reflect.Type) (i int, rv refl
 	return
 }
 
+// update value by pk.
 func (s *Storage) Update(v interface{}) (e error) {
 	// check value type
 	rv, _, name, e := getReflect(v)
@@ -146,6 +157,7 @@ func (s *Storage) Update(v interface{}) (e error) {
 	return
 }
 
+// delete value by pk
 func (s *Storage) Delete(v interface{}) (e error) {
 	// check value type
 	rv, _, name, e := getReflect(v)
@@ -172,6 +184,7 @@ func (s *Storage) Delete(v interface{}) (e error) {
 	return
 }
 
+// set pk value. check the pk in value is over max or not.
 func (s *Storage) setPk(rv reflect.Value, sc *Schema) int {
 	pk := getReflectFieldValue(rv, sc.PK).(int)
 	if pk > sc.Max {
@@ -184,6 +197,7 @@ func (s *Storage) setPk(rv reflect.Value, sc *Schema) int {
 	return pk
 }
 
+// create new storage with directory and mapper.
 func NewStorage(directory string, saver string) (s *Storage, e error) {
 	if !com.IsDir(directory) {
 		e = os.MkdirAll(directory, os.ModePerm)

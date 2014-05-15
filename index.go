@@ -5,13 +5,15 @@ import (
 	"github.com/Unknwon/com"
 )
 
+// Index is value index operator.
 type Index struct {
-	prefix string
+	prefix string // the key for saving keys
 	raw    map[string][]interface{}
 	file   string
 	s      Mapper
 }
 
+// refresh index keys
 func (idx *Index) refresh() {
 	tmp := []interface{}{}
 	for k, v := range idx.raw {
@@ -19,6 +21,7 @@ func (idx *Index) refresh() {
 			continue
 		}
 		if len(v) < 1 {
+			// delete key if empty value
 			delete(idx.raw, k)
 			continue
 		}
@@ -27,6 +30,7 @@ func (idx *Index) refresh() {
 	idx.raw[idx.prefix] = tmp
 }
 
+// put value to index by key.
 func (idx *Index) Put(key string, value interface{}) {
 	tmp := idx.raw[key]
 	if len(tmp) < 1 {
@@ -41,13 +45,16 @@ func (idx *Index) Put(key string, value interface{}) {
 	idx.refresh()
 }
 
+// get index by key.
 func (idx *Index) Get(key string) []interface{} {
 	return idx.raw[key]
 }
 
+// delete value in index by key
 func (idx *Index) Del(key string, value interface{}) {
 	tmp := idx.raw[key]
 	for k, v := range tmp {
+		// use string to check equal
 		if fmt.Sprintf("%v", v) == fmt.Sprintf("%v", value) {
 			tmp = append(tmp[:k], tmp[k+1:]...)
 		}
@@ -56,10 +63,12 @@ func (idx *Index) Del(key string, value interface{}) {
 	idx.refresh()
 }
 
+// flush index data to file.
 func (idx *Index) Flush() error {
 	return idx.s.ToFile(idx.file, idx.raw)
 }
 
+// create or read index from index file.
 func NewIndex(prefix string, file string, s Mapper) (idx *Index, e error) {
 	idx = new(Index)
 	idx.prefix = prefix
@@ -81,12 +90,14 @@ func NewIndex(prefix string, file string, s Mapper) (idx *Index, e error) {
 
 //--------------------------------
 
+// Pk is pk index operator.
 type Pk struct {
 	raw  []int
 	s    Mapper
 	file string
 }
 
+// put pk to index.
 func (p *Pk) Put(i int) {
 	_, b := isInIntSlice(p.raw, i)
 	if !b {
@@ -94,14 +105,17 @@ func (p *Pk) Put(i int) {
 	}
 }
 
+// get pk position in index.
 func (p *Pk) Get(i int) (int, bool) {
 	return isInIntSlice(p.raw, i)
 }
 
+// get all pks in index.
 func (p *Pk) All() []int {
 	return p.raw
 }
 
+// delete pk in index.
 func (p *Pk) Del(i int) {
 	for k, v := range p.raw {
 		if v == i {
@@ -110,10 +124,12 @@ func (p *Pk) Del(i int) {
 	}
 }
 
+// flush pk index to file.
 func (p *Pk) Flush() error {
 	return p.s.ToFile(p.file, p.raw)
 }
 
+// create or read pk index from file.
 func NewPkIndex(file string, s Mapper) (p *Pk, e error) {
 	p = new(Pk)
 	p.s = s

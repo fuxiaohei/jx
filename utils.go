@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// get reflect type of value.
+// if pointer, return inner type.
+// only support struct type.
 func getReflectType(a interface{}) (rt reflect.Type, name string, e error) {
 	rt = reflect.TypeOf(a)
 	if rt.Kind() != reflect.Ptr {
@@ -21,6 +24,8 @@ func getReflectType(a interface{}) (rt reflect.Type, name string, e error) {
 	return
 }
 
+// get reflect value.
+// if pointer, return inner value.
 func getReflect(a interface{}) (rv reflect.Value, rt reflect.Type, name string, e error) {
 	rv = reflect.ValueOf(a)
 	if rv.Kind() != reflect.Ptr {
@@ -37,6 +42,7 @@ func getReflect(a interface{}) (rv reflect.Value, rt reflect.Type, name string, 
 	return
 }
 
+// get field interface value in reflect value by field name.
 func getReflectFieldValue(rv reflect.Value, fieldName string) interface{} {
 	rf := rv.FieldByName(fieldName)
 	if !rf.IsValid() {
@@ -45,6 +51,8 @@ func getReflectFieldValue(rv reflect.Value, fieldName string) interface{} {
 	return rf.Interface()
 }
 
+// set field value to reflect value.
+// make sure the setting value's type is matched to field type in reflect value.
 func setReflectField(rv reflect.Value, fieldName string, v interface{}) {
 	rf := rv.FieldByName(fieldName)
 	if !rf.IsValid() {
