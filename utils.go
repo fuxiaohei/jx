@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+func getReflectTypeName(rt reflect.Type) string {
+	return strings.ToLower(fmt.Sprint(rt))
+}
+
 // get reflect type of value.
 // if pointer, return inner type.
 // only support struct type.
@@ -16,7 +20,7 @@ func getReflectType(a interface{}) (rt reflect.Type, name string, e error) {
 		return
 	}
 	rt = rt.Elem()
-	name = strings.ToLower(fmt.Sprint(rt))
+	name = getReflectTypeName(rt)
 	if rt.Kind() != reflect.Struct {
 		e = fmtError(ErrStrStructNeedPointer, rt)
 		return

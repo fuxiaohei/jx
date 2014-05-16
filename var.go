@@ -7,6 +7,9 @@ import (
 
 const (
 	MAPPER_JSON = "JSON"
+
+	ORDER_DESC = 9
+	ORDER_ASC  = 6
 )
 
 var (
@@ -20,8 +23,8 @@ var (
 
 	ErrStrUpdateNullData = "update null '%s' with pk '%d'"
 
-
 	ErrorNoData = errors.New("no data") // no data error
+	ErrorToSliceNeedSlice = errors.New("need a reference of slice of struct pointer")
 )
 
 func fmtError(msg string, a ...interface{}) error {
