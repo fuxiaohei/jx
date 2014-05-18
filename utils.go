@@ -3,6 +3,7 @@ package gojx
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -85,4 +86,12 @@ func isInInterfaceSlice(src []interface{}, value interface{}) (i int, b bool) {
 		}
 	}
 	return
+}
+
+func sortIntSliceASC(src []int) {
+	sort.Sort(sort.IntSlice(src))
+}
+
+func sortIntSliceDESC(src []int) {
+	sort.Sort(sort.Reverse(sort.IntSlice(src)))
 }

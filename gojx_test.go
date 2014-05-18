@@ -62,20 +62,21 @@ type Student struct {
 func init() {
 	os.RemoveAll(directory)
 	s, _ = NewStorage(directory, MAPPER_JSON)
-	s.Register(new(User), 20)
-	s.Register(new(School), 100)
+	s.Register(new(User), 100)
+	s.Register(new(Student), 100)
 	for i := 0; i <= insertSize; i++ {
 		user := new(User)
 		user.UserName = randomString(3)
 		user.Email = randomString(12)
 		user.Password = randomString(10)
 		s.Put(user)
-		if i%3 == 1 {
-			school := new(School)
-			school.Address = randomString(20)
-			school.Rank = randomInt(4)
-			s.Put(school)
-		}
+
+		student := new(Student)
+		student.Name = randomString(4)
+		student.Class = randomString(2)
+		student.Grade = randomString(1)
+		s.Put(student)
+
 	}
 }
 
@@ -84,28 +85,28 @@ func printError(t *testing.T, name string, except, got interface{}) {
 }
 
 func TestRegister(t *testing.T) {
-	e := s.Register(new(Student), 55)
+	e := s.Register(new(School), 55)
 	if e != nil {
 		t.Error(e)
 		return
 	}
-	name := strings.ToLower(fmt.Sprint(reflect.TypeOf(new(Student)).Elem()))
+	name := strings.ToLower(fmt.Sprint(reflect.TypeOf(new(School)).Elem()))
 	sc := s.schema[name]
 	if sc == nil {
 		printError(t, "RegisterNoSchema", name, nil)
 		return
 	}
-	if sc.PK != "No" {
-		printError(t, "RegisterPk", "No", sc.PK)
+	if sc.PK != "Id" {
+		printError(t, "RegisterPk", "Id", sc.PK)
 		return
 	}
 
-	if sc.Index[1] != "Grade" {
-		printError(t, "RegisterIndexHas", "Grade", sc.Index[1])
+	if sc.Index[0] != "Rank" {
+		printError(t, "RegisterIndexHas", "Rank", sc.Index[1])
 		return
 	}
 
-	file := path.Join(directory, name, "grade.idx")
+	file := path.Join(directory, name, "rank.idx")
 	if !com.IsFile(file) {
 		printError(t, "RegisterHasFile:"+file, true, false)
 		return
@@ -192,6 +193,31 @@ func BenchmarkGetByPk(b *testing.B) {
 	u := &User{Id: 99}
 	for i := 0; i < b.N; i++ {
 		s.Get(u)
+	}
+}
+
+func TestGetByIndex(t *testing.T) {
+	query := NewQuery(s)
+	students := []*Student{}
+	query.Eq("Class", "aa").Eq("Grade", "a").ToSlice(&students)
+
+	for _, stu := range students {
+		if stu.Class != "aa" {
+			printError(t, "GetByIndex-Class", "aa", stu.Class)
+			return
+		}
+		if stu.Grade != "a" {
+			printError(t, "GetByIndex-Grade", "a", stu.Grade)
+			return
+		}
+	}
+}
+
+func BenchmarkGetByIndex(b *testing.B) {
+	query := NewQuery(s)
+	for i := 0; i <= b.N; i++ {
+		students := []*Student{}
+		query.Eq("Class", "aa").Eq("Grade", "c").ToSlice(&students)
 	}
 }
 
