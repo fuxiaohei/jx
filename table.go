@@ -7,6 +7,7 @@ import (
 	"path"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 // table provides indexes and chunks methods for each schema type value.
@@ -125,7 +126,7 @@ func NewTable(name string, directory string, sc *Schema, s Mapper) (t *Table, e 
 	t.sc = sc
 
 	// add or read pk index
-	t.pkIndex, e = NewPkIndex(path.Join(directory, com.StrToLower(sc.PK+".pk")), s)
+	t.pkIndex, e = NewPkIndex(path.Join(directory, strings.ToLower(sc.PK+".pk")), s)
 	if e != nil {
 		return
 	}
@@ -133,7 +134,7 @@ func NewTable(name string, directory string, sc *Schema, s Mapper) (t *Table, e 
 	// add or read value index
 	t.valueIndex = make(map[string]*Index)
 	for _, v := range sc.Index {
-		t.valueIndex[v], e = NewIndex(com.StrToLower(name+"_"+v), path.Join(directory, com.StrToLower(v+".idx")), s)
+		t.valueIndex[v], e = NewIndex(strings.ToLower(name+"_"+v), path.Join(directory, com.StrToLower(v+".idx")), s)
 		if e != nil {
 			return
 		}
