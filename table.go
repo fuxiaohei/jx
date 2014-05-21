@@ -134,7 +134,7 @@ func NewTable(name string, directory string, sc *Schema, s Mapper) (t *Table, e 
 	// add or read value index
 	t.valueIndex = make(map[string]*Index)
 	for _, v := range sc.Index {
-		t.valueIndex[v], e = NewIndex(strings.ToLower(name+"_"+v), path.Join(directory, com.StrToLower(v+".idx")), s)
+		t.valueIndex[v], e = NewIndex(strings.ToLower(name+"_"+v), path.Join(directory, strings.ToLower(v+".idx")), s)
 		if e != nil {
 			return
 		}
