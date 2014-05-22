@@ -23,7 +23,7 @@ var (
 
 	ErrStrUpdateNullData = "update null '%s' with pk '%d'"
 
-	ErrorNoData = errors.New("no data") // no data error
+	ErrorNoData           = errors.New("no data") // no data error
 	ErrorToSliceNeedSlice = errors.New("need a reference of slice of struct pointer")
 )
 

@@ -201,6 +201,11 @@ func TestGetByIndex(t *testing.T) {
 	students := []*Student{}
 	query.Eq("Class", "aa").Eq("Grade", "a").ToSlice(&students)
 
+	if len(students) < 1 {
+		printError(t, "GetByIndex", "above 0", 0)
+		return
+	}
+
 	for _, stu := range students {
 		if stu.Class != "aa" {
 			printError(t, "GetByIndex-Class", "aa", stu.Class)

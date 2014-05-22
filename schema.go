@@ -6,6 +6,7 @@ type Schema struct {
 	Name      string
 	PK        string
 	Index     []string
+	IndexType map[string]string
 	Max       int
 	ChunkSize int
 	file      string
@@ -22,6 +23,7 @@ func NewSchema(rt reflect.Type, size int) (sc *Schema, e error) {
 	sc.Name = rt.Name()
 	sc.Max = 0
 	sc.Index = []string{}
+	sc.IndexType = make(map[string]string)
 	sc.ChunkSize = size
 
 	// parse fields
@@ -41,6 +43,7 @@ func NewSchema(rt reflect.Type, size int) (sc *Schema, e error) {
 		}
 		if tag == "index" {
 			sc.Index = append(sc.Index, field.Name)
+			sc.IndexType[field.Name] = field.Type.Name()
 		}
 	}
 	return

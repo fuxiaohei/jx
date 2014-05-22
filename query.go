@@ -3,13 +3,13 @@ package gojx
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
 // Query provides query engine for selection by condition.
 type Query struct {
-	s     *Storage
+	s *Storage
+
 	eq    map[string]interface{}
 	order string
 	limit [2]int
@@ -63,11 +63,6 @@ func (q *Query) ToSlice(v interface{}) (e error) {
 	// parse eq condition
 	sliceResult := q.parseEq(table)
 
-	// parse order
-	sliceResult = q.parseOrder(sliceResult)
-
-	// parse limit condition
-	sliceResult = q.parseLimit(sliceResult)
 	if len(sliceResult) < 1 {
 		return
 	}
@@ -132,11 +127,9 @@ func (q *Query) parseEq(t *Table) []int {
 			return []int{}
 		}
 	}
-	result := make([]int, len(res))
-	for i, v := range res {
-		pk, _ := strconv.Atoi(fmt.Sprint(v))
-		result[i] = pk
-	}
+	result := itfSliceToIntSlice(res)
+	result = q.parseOrder(result)
+	result = q.parseLimit(result)
 	return result
 }
 
@@ -155,6 +148,7 @@ func (q *Query) parseLimit(result []int) []int {
 	return result
 }
 
+// order result slice
 func (q *Query) parseOrder(result []int) []int {
 	if q.order == "ASC" {
 		sortIntSliceASC(result)

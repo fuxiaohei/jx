@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -94,4 +95,29 @@ func sortIntSliceASC(src []int) {
 
 func sortIntSliceDESC(src []int) {
 	sort.Sort(sort.Reverse(sort.IntSlice(src)))
+}
+
+func sortStrSliceASC(src []string) {
+	sort.Sort(sort.StringSlice(src))
+}
+
+func sortStrSliceDESC(src []string) {
+	sort.Sort(sort.Reverse(sort.StringSlice(src)))
+}
+
+func itfSliceToStringSlice(src []interface{}) (res []string) {
+	res = make([]string, len(src))
+	for i, v := range src {
+		res[i] = fmt.Sprint(v)
+	}
+	return
+}
+
+func itfSliceToIntSlice(src []interface{}) (res []int) {
+	res = make([]int, len(src))
+	for i, v := range src {
+		str := fmt.Sprint(v)
+		res[i], _ = strconv.Atoi(str)
+	}
+	return
 }
