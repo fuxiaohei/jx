@@ -35,7 +35,7 @@ func (q *Query) Pager(page, size int) *Query {
 	if size < 1 {
 		size = 1
 	}
-	q.limit = [2]int{(page - 1) * size, page * size}
+	q.limit = [2]int{(page-1)*size, page*size}
 	return q
 }
 
