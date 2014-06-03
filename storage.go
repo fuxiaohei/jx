@@ -5,6 +5,7 @@ import (
 	"github.com/Unknwon/com"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -227,6 +228,30 @@ func (s *Storage) Optimize() (e error) {
 // apply optimized rebuild files to old data files.
 // if rebuild file is newer than original file, replace with newer one.
 func (s *Storage) applyOptimized() (e error) {
+	e = filepath.Walk(s.directory, func(p string, info os.FileInfo, _ error) error {
+		if path.Ext(p) == ".rebuild" {
+
+			// find original file from rebuild file
+			dataFile := strings.TrimSuffix(p, ".rebuild")
+			if !com.IsFile(dataFile) {
+				return nil
+			}
+			t, _ := com.FileMTime(dataFile)
+
+			// if rebuild file is newer, replace original file
+			if t > 0 && info.ModTime().Unix() > t {
+				err := os.Remove(dataFile)
+				if err != nil {
+					return err
+				}
+				err = os.Rename(p, dataFile)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 	return
 }
 

@@ -143,7 +143,7 @@ func (idx *Index) PutValue(v IndexValue) (e error) {
 // it writes new indexValues to a rebuild file.
 func (idx *Index) Rebuild() (e error) {
 	for name, indexes := range idx.data {
-		file := idx.files[name] + ".build"
+		file := idx.files[name] + ".rebuild"
 		os.Remove(file)
 
 		var writer *os.File
