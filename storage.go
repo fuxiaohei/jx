@@ -1,223 +1,255 @@
 package gojx
 
 import (
+	"errors"
 	"github.com/Unknwon/com"
 	"os"
 	"path"
 	"reflect"
+	"strings"
 )
 
-// Storage manages indexes, chunks and schema.
+var (
+	NULL     = errors.New("NULL")
+	CONFLICT = errors.New("CONFLICT")
+)
+
+// StorageConfig is options for storage init
+type StorageConfig struct {
+	Dir      string
+	Encoder  Encoder
+	Size     int
+	Optimize bool
+}
+
+// fill config as default value if empty
+func buildStorageConfig(conf StorageConfig) StorageConfig {
+	if conf.Dir == "" {
+		conf.Dir = "data"
+	}
+	if conf.Encoder == nil {
+		conf.Encoder = new(JsonEncoder)
+	}
+	if conf.Size < 1 {
+		conf.Size = 5000
+	}
+	return conf
+}
+
+// Storage is main saving engine and manages objects, tables and indexes.
 type Storage struct {
 	directory string
+	encoder   Encoder
+	size      int
 
-	schema     map[string]*Schema
-	schemaFile string
-
-	table map[string]*Table
-
-	saver Mapper
+	Objects map[string]*Object
+	Tables  map[string]*Table
+	Indexes map[string]*Index
 }
 
-// bootstrap storage, read indexes, chunks and schema.
-func (s *Storage) bootstrap() (e error) {
-	if com.IsFile(s.schemaFile) {
-		// load schema first
-		e = s.saver.FromFile(s.schemaFile, &s.schema)
-		if e != nil {
-			return
-		}
-
-		// load table
-		s.table = make(map[string]*Table)
-		for k, sc := range s.schema {
-			s.table[k], e = NewTable(k, path.Join(s.directory, k), sc, s.saver)
-			if e != nil {
-				return
-			}
-		}
-	} else {
-		s.schema = make(map[string]*Schema)
-		s.table = make(map[string]*Table)
+// get value's reflect data, object and index
+func (s *Storage) getValueMeta(v interface{}) (rv reflect.Value, rt reflect.Type, obj *Object, tbl *Table, idx *Index) {
+	rv = reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
 	}
+	rt = rv.Type()
+	obj = s.Objects[rt.String()]
+	tbl = s.Tables[rt.String()]
+	idx = s.Indexes[rt.String()]
 	return
 }
 
-// flush schema data fo file.
-func (s *Storage) flushSchema() error {
-	return s.saver.ToFile(s.schemaFile, s.schema)
-}
-
-// register struct to schema.
-// size means the chunk size for this schema data.
-func (s *Storage) Register(v interface{}, size int) (e error) {
-	rt, name, e := getReflectType(v)
-	// check schema existing
-	if _, ok := s.schema[name]; ok {
-		return
-	}
-	if e != nil {
-		return e
-	}
-	// create schema
-	s.schema[name], e = NewSchema(rt, size)
-	if e != nil {
-		return e
-	}
-	// create table
-	s.table[name], e = NewTable(name, path.Join(s.directory, name), s.schema[name], s.saver)
-	if e != nil {
-		return e
-	}
-	return s.flushSchema()
-}
-
-// put value to storage.
-// the type of value need be registered.
-// if pk is over schema max, use pk in value.
+// put value to storage
 func (s *Storage) Put(v interface{}) (e error) {
-	rv, _, name, e := getReflect(v)
-	if e != nil {
+	rv, rt, obj, tbl, idx := s.getValueMeta(v)
+	if obj == nil || tbl == nil {
+		return errors.New("unknown struct " + rt.String())
+	}
+
+	// set pk
+	var pk int64
+	if pk, e = obj.SetPk(rv); e != nil {
 		return
 	}
-	sc := s.schema[name]
-	if sc == nil {
-		return fmtError(ErrStrSchemaUnknown, name)
-	}
-	pk := s.setPk(rv, sc)
-	e = s.table[name].Put(rv, pk)
-	if e != nil {
+
+	// put to table
+	if e = tbl.Put(pk, v); e != nil {
 		return
 	}
-	return s.flushSchema()
+
+	// put to index
+	e = idx.Put(pk, rv)
+	return
 }
 
-// get value by pk
+// set value to storage.
+// set existed pk value to new value, means update.
+func (s *Storage) Set(v interface{}) (e error) {
+	rv, rt, obj, tbl, idx := s.getValueMeta(v)
+	if obj == nil || tbl == nil {
+		return errors.New("unknown struct " + rt.String())
+	}
+	pk := getPk(rv, obj.Pk)
+	if pk < 1 {
+		return NULL
+	}
+
+	// get old data
+	old, e := tbl.Get(pk)
+	if e != nil {
+		return
+	}
+	if old == nil {
+		return NULL
+	}
+
+	// set to tale
+	if e = tbl.Set(pk, v); e != nil {
+		return
+	}
+
+	// set to index
+	e = idx.Set(pk, rv, reflect.ValueOf(old).Elem())
+	return
+}
+
+// get from storage by object pk
 func (s *Storage) Get(v interface{}) (e error) {
-	rv, _, name, e := getReflect(v)
-	if e != nil {
-		return
+	rv, rt, obj, tbl, _ := s.getValueMeta(v)
+	if obj == nil || tbl == nil {
+		return errors.New("unknown struct " + rt.String())
 	}
-	sc := s.schema[name]
-	if sc == nil {
-		return fmtError(ErrStrSchemaUnknown, name)
-	}
-	pk := getReflectFieldValue(rv, sc.PK).(int)
+	pk := getPk(rv, obj.Pk)
 	if pk < 1 {
-		return fmtError(ErrStrStructPkZero, name)
+		return NULL
 	}
-	_, res, e := s.table[name].Get(pk)
+
+	// get from table
+	result, e := tbl.Get(pk)
 	if e != nil {
 		return
 	}
-	if res == nil {
-		return ErrorNoData
+	if result == nil {
+		return NULL
 	}
-	e = s.saver.ToStruct(res, v)
+
+	// set to value
+	rv.Set(reflect.ValueOf(result).Elem())
 	return
 }
 
-// get reflect.Value by pk and type name.
-func (s *Storage) getValue(pk int, name string, rt reflect.Type) (i int, rv reflect.Value, e error) {
-	rv = reflect.New(rt)
-	i, res, e := s.table[name].Get(pk)
-	if e != nil {
-		return
+// delete value by object pk
+func (s *Storage) Del(v interface{}) (e error) {
+	rv, rt, obj, tbl, idx := s.getValueMeta(v)
+	if obj == nil || tbl == nil {
+		return errors.New("unknown struct " + rt.String())
 	}
-	if res == nil {
-		e = ErrorNoData
-		return
-	}
-	e = s.saver.ToStruct(res, rv.Interface())
-	return
-}
-
-// update value by pk.
-func (s *Storage) Update(v interface{}) (e error) {
-	// check value type
-	rv, _, name, e := getReflect(v)
-	if e != nil {
-		return
-	}
-	sc := s.schema[name]
-	if sc == nil {
-		return fmtError(ErrStrSchemaUnknown, name)
-	}
-	pk := getReflectFieldValue(rv, sc.PK).(int)
+	pk := getPk(rv, obj.Pk)
 	if pk < 1 {
-		return fmtError(ErrStrStructPkZero, name)
+		return NULL
 	}
 
 	// get old value
-	i, oldV, e := s.getValue(pk, name, rv.Type())
+	old, e := tbl.Get(pk)
 	if e != nil {
 		return
 	}
-	if oldV.IsNil() {
-		return ErrorNoData
+	if old == nil {
+		return NULL
 	}
-	e = s.table[name].Update(pk, i, oldV.Elem(), rv)
+
+	// delete in table
+	if e = tbl.Del(pk); e != nil {
+		return
+	}
+
+	// delete in index
+	e = idx.Del(pk, reflect.ValueOf(old).Elem())
 	return
 }
 
-// delete value by pk
-func (s *Storage) Delete(v interface{}) (e error) {
-	// check value type
-	rv, _, name, e := getReflect(v)
-	if e != nil {
-		return
-	}
-	sc := s.schema[name]
-	if sc == nil {
-		return fmtError(ErrStrSchemaUnknown, name)
-	}
-	pk := getReflectFieldValue(rv, sc.PK).(int)
-	if pk < 1 {
-		return fmtError(ErrStrStructPkZero, name)
-	}
+func (s *Storage) Sync(value ...interface{}) (e error) {
+	for _, v := range value {
 
-	i, nrv, e := s.getValue(pk, name, rv.Type())
-	if e != nil {
-		return
+		// create object
+		obj, e := NewObject(v, s.directory)
+		if e != nil {
+			return e
+		}
+		s.Objects[obj.DataType.String()] = obj
+
+		// create table
+		dir := strings.ToLower(path.Join(s.directory, obj.DataType.String()))
+		s.Tables[obj.DataType.String()], e = NewTable(obj.DataType, dir, s.encoder, obj.Pk, s.size)
+		if e != nil {
+			return e
+		}
+
+		// create index
+		s.Indexes[obj.DataType.String()], e = NewIndex(obj.Indexes, dir, s.encoder)
+		if e != nil {
+			return e
+		}
 	}
-	if nrv.IsNil() {
-		return ErrorNoData
-	}
-	e = s.table[name].Delete(pk, i, nrv.Elem())
 	return
 }
 
-// set pk value. check the pk in value is over max or not.
-func (s *Storage) setPk(rv reflect.Value, sc *Schema) int {
-	pk := getReflectFieldValue(rv, sc.PK).(int)
-	if pk > sc.Max {
-		sc.Max = pk
-		return pk
+// flush all tables.
+// write data from system buffer to disk file.
+func (s *Storage) Flush() (e error) {
+	for _, tbl := range s.Tables {
+		if e = tbl.Flush(); e != nil {
+			return
+		}
 	}
-	sc.Max++
-	pk = sc.Max
-	setReflectField(rv, sc.PK, pk)
-	return pk
+	return
 }
 
-// create new storage with directory and mapper.
-func NewStorage(directory string, saver string) (s *Storage, e error) {
-	if !com.IsDir(directory) {
-		e = os.MkdirAll(directory, os.ModePerm)
+// optimize all tables and indexes.
+// create rebuild files for optimized result.
+func (s *Storage) Optimize() (e error) {
+	for _, tbl := range s.Tables {
+		e = tbl.Rebuild()
 		if e != nil {
 			return
 		}
 	}
-	if _, ok := mapperManager[saver]; !ok {
-		e = fmtError(ErrStrSaverUnknown, saver)
-		return
+	for _, idx := range s.Indexes {
+		e = idx.Rebuild()
+		if e != nil {
+			return
+		}
 	}
-	s = new(Storage)
-	s.directory = directory
-	s.schemaFile = path.Join(s.directory, "schema.scm")
-	s.saver = mapperManager[saver]
-	if e = s.bootstrap(); e != nil {
-		return
+	return
+}
+
+// apply optimized rebuild files to old data files.
+// if rebuild file is newer than original file, replace with newer one.
+func (s *Storage) applyOptimized() (e error) {
+	return
+}
+
+// new storage with config.
+// if exist, read storage.
+func New(conf StorageConfig) (s *Storage, e error) {
+	conf = buildStorageConfig(conf)
+	// create storage directory
+	if !com.IsDir(conf.Dir) {
+		if e = os.MkdirAll(conf.Dir, os.ModePerm); e != nil {
+			return
+		}
+	}
+	s = &Storage{
+		directory: conf.Dir,
+		encoder:   conf.Encoder,
+		size:      conf.Size,
+		Objects:   make(map[string]*Object),
+		Tables:    make(map[string]*Table),
+		Indexes:   make(map[string]*Index),
+	}
+	if conf.Optimize {
+		e = s.applyOptimized()
 	}
 	return
 }

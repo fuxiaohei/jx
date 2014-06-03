@@ -2,19 +2,15 @@ package gojx
 
 import (
 	"crypto/rand"
-	"fmt"
-	"github.com/Unknwon/com"
 	"os"
-	"path"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 )
 
 var (
 	s          *Storage
-	insertSize = 100
+	insertSize = 1666
 	directory  = "_test"
 )
 
@@ -40,82 +36,66 @@ func randomInt(n int) int {
 }
 
 type User struct {
-	Id       int    `jx:"pk"`
-	UserName string `jx:"index"`
+	Id       int64  `gojx:"pk"`
+	UserName string `gojx:"index"`
 	Password string
-	Email    string `jx:"index"`
+	Email    string `gojx:"index"`
 }
 
 type School struct {
-	Id      int `jx:"pk"`
+	Id      int64 `gojx:"pk"`
 	Address string
-	Rank    int `jx:"index"`
+	Rank    int `gojx:"index"`
 }
 
 type Student struct {
-	No    int `jx:"pk"`
+	No    int64 `gojx:"pk"`
 	Name  string
-	Class string `jx:"index"`
-	Grade string `jx:"index"`
+	Class string `gojx:"index"`
+	Grade string `gojx:"index"`
 }
 
 func init() {
 	os.RemoveAll(directory)
-	s, _ = NewStorage(directory, MAPPER_JSON)
-	s.Register(new(User), 100)
-	s.Register(new(Student), 100)
-	for i := 0; i <= insertSize; i++ {
+
+	var e error
+	s, e = New(StorageConfig{Dir: directory, Encoder: new(GobEncoder)})
+	if e != nil {
+		panic(e)
+	}
+	e = s.Sync(new(User))
+	if e != nil {
+		panic(e)
+	}
+
+	for i := 0; i < insertSize; i++ {
 		user := new(User)
 		user.UserName = randomString(3)
 		user.Email = randomString(12)
 		user.Password = randomString(10)
-		s.Put(user)
+		if e = s.Put(user); e != nil {
+			panic(e)
+		}
+	}
 
-		student := new(Student)
-		student.Name = randomString(4)
-		student.Class = randomString(2)
-		student.Grade = randomString(1)
-		s.Put(student)
+	e = s.Flush()
+	if e != nil {
+		panic(e)
+	}
 
+	// reload
+	s, e = New(StorageConfig{Dir: directory, Encoder: new(GobEncoder)})
+	if e != nil {
+		panic(e)
+	}
+	e = s.Sync(new(User))
+	if e != nil {
+		panic(e)
 	}
 }
 
 func printError(t *testing.T, name string, except, got interface{}) {
 	t.Errorf("%s: (Except => %v) (Got => %v)", name, except, got)
-}
-
-func TestRegister(t *testing.T) {
-	e := s.Register(new(School), 55)
-	if e != nil {
-		t.Error(e)
-		return
-	}
-	name := strings.ToLower(fmt.Sprint(reflect.TypeOf(new(School)).Elem()))
-	sc := s.schema[name]
-	if sc == nil {
-		printError(t, "RegisterNoSchema", name, nil)
-		return
-	}
-	if sc.PK != "Id" {
-		printError(t, "RegisterPk", "Id", sc.PK)
-		return
-	}
-
-	if sc.Index[0] != "Rank" {
-		printError(t, "RegisterIndexHas", "Rank", sc.Index[1])
-		return
-	}
-
-	file := path.Join(directory, name, "rank.idx")
-	if !com.IsFile(file) {
-		printError(t, "RegisterHasFile:"+file, true, false)
-		return
-	}
-
-	if sc.ChunkSize != 55 {
-		printError(t, "RegisterChunkSize", 55, sc.ChunkSize)
-	}
-
 }
 
 func TestPut(t *testing.T) {
@@ -128,13 +108,13 @@ func TestPut(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	if user.Id != 102 {
-		printError(t, "Put", 102, user.Id)
+	if user.Id != 1667 {
+		printError(t, "Put", 1667, user.Id)
 		return
 	}
 
 	user = new(User)
-	user.Id = 999
+	user.Id = 1999
 	user.UserName = randomString(3)
 	user.Email = randomString(12)
 	user.Password = randomString(10)
@@ -143,10 +123,9 @@ func TestPut(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	name := strings.ToLower(fmt.Sprint(reflect.TypeOf(user).Elem()))
-	sc := s.schema[name]
-	if sc.Max != 999 {
-		printError(t, "PutOverMax", 999, sc.Max)
+	obj := s.Objects[reflect.TypeOf(User{}).String()]
+	if obj.Increment != 1999 {
+		printError(t, "PutOverMax", 1999, obj.Increment)
 		return
 	}
 
@@ -159,11 +138,10 @@ func TestPut(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	if user.Id != 1000 {
-		printError(t, "PutAfterOverMax", 1000, user.Id)
+	if user.Id != 2000 {
+		printError(t, "PutAfterOverMax", 2000, user.Id)
 		return
 	}
-
 }
 
 func BenchmarkPut(b *testing.B) {
@@ -184,45 +162,15 @@ func TestGet(t *testing.T) {
 		return
 	}
 	if len(u.UserName) != 3 || len(u.Email) != 12 {
-		printError(t, "GetByPk", u.UserName+":"+u.Email, nil)
+		printError(t, "Get", u.UserName+":"+u.Email, nil)
 		return
 	}
 }
 
-func BenchmarkGetByPk(b *testing.B) {
+func BenchmarkGet(b *testing.B) {
 	u := &User{Id: 99}
 	for i := 0; i < b.N; i++ {
 		s.Get(u)
-	}
-}
-
-func TestGetByIndex(t *testing.T) {
-	query := NewQuery(s)
-	students := []*Student{}
-	query.Eq("Class", "aa").Eq("Grade", "a").ToSlice(&students)
-
-	if len(students) < 1 {
-		printError(t, "GetByIndex", "above 0", 0)
-		return
-	}
-
-	for _, stu := range students {
-		if stu.Class != "aa" {
-			printError(t, "GetByIndex-Class", "aa", stu.Class)
-			return
-		}
-		if stu.Grade != "a" {
-			printError(t, "GetByIndex-Grade", "a", stu.Grade)
-			return
-		}
-	}
-}
-
-func BenchmarkGetByIndex(b *testing.B) {
-	query := NewQuery(s)
-	for i := 0; i <= b.N; i++ {
-		students := []*Student{}
-		query.Eq("Class", "aa").Eq("Grade", "c").ToSlice(&students)
 	}
 }
 
@@ -232,14 +180,14 @@ func TestUpdate(t *testing.T) {
 	user.UserName = "aaa"
 	user.Email = randomString(12)
 	user.Password = randomString(10)
-	e := s.Update(user)
-	if e != ErrorNoData {
-		printError(t, "UpdateNonExist", ErrorNoData, e)
+	e := s.Set(user)
+	if e != NULL {
+		printError(t, "UpdateNonExist", NULL, e)
 		return
 	}
 
 	user.Id = 9
-	e = s.Update(user)
+	e = s.Set(user)
 	if e != nil {
 		printError(t, "Update", nil, e)
 		return
@@ -265,28 +213,28 @@ func BenchmarkUpdate(b *testing.B) {
 	user.Email = randomString(12)
 	user.Password = randomString(10)
 	for i := 0; i < b.N; i++ {
-		s.Update(user)
+		s.Set(user)
 	}
 }
 
 func TestDelete(t *testing.T) {
 	user := new(User)
 	user.Id = 9999
-	e := s.Delete(user)
-	if e != ErrorNoData {
-		printError(t, "DeleteNonExist", ErrorNoData, e)
+	e := s.Del(user)
+	if e != NULL {
+		printError(t, "DeleteNonExist", NULL, e)
 		return
 	}
 
 	user.Id = 9
-	e = s.Delete(user)
+	e = s.Del(user)
 	if e != nil {
 		t.Error(e)
 		return
 	}
 	e = s.Get(user)
-	if e != ErrorNoData {
-		printError(t, "Delete", ErrorNoData, e)
+	if e != NULL {
+		printError(t, "Delete", NULL, e)
 		return
 	}
 }
@@ -295,7 +243,7 @@ func BenchmarkDelete(b *testing.B) {
 	user := new(User)
 	user.Id = 0
 	for i := 0; i <= b.N; i++ {
-		user.Id = i + 1
-		s.Delete(user)
+		user.Id = int64(i + 1)
+		s.Del(user)
 	}
 }

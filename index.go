@@ -1,148 +1,262 @@
 package gojx
 
 import (
-	"fmt"
+	"bufio"
 	"github.com/Unknwon/com"
+	"io"
+	"os"
+	"path"
+	"reflect"
+	"strings"
 )
 
-// Index is value index operator.
+var (
+	indexSep = []byte{10, 0, 0, 0, 10}
+)
+
+// IndexValue is single index item struct. It maintains index's name, value and pk.
+// If Del is true, it marks this item as deleted,
+// so the previous index value with same name, pk and value is ignored.
+type IndexValue struct {
+	Name string
+	Pk   int64
+	Val  interface{}
+	Del  bool
+}
+
+// Index is index value's manager.
+// Get, put and delete working for indexes.
 type Index struct {
-	prefix string // the key for saving keys
-	raw    map[string][]interface{}
-	file   string
-	s      Mapper
+	files       map[string]string
+	fileTypes   map[string]reflect.Type
+	fileWriters map[string]*os.File
+
+	data    map[string]map[interface{}][]int64
+	encoder Encoder
 }
 
-// refresh index keys
-func (idx *Index) refresh() {
-	tmp := []interface{}{}
-	for k, v := range idx.raw {
-		if k == idx.prefix {
-			continue
-		}
-		if len(v) < 1 {
-			// delete key if empty value
-			delete(idx.raw, k)
-			continue
-		}
-		tmp = append(tmp, k)
+// put index value to memory
+func (idx *Index) putToMem(v IndexValue) {
+	if _, ok := idx.data[v.Name]; !ok {
+		idx.data[v.Name] = make(map[interface{}][]int64)
 	}
-	idx.raw[idx.prefix] = tmp
-}
-
-// put value to index by key.
-func (idx *Index) Put(key string, value interface{}) {
-	tmp := idx.raw[key]
-	if len(tmp) < 1 {
-		tmp = []interface{}{value}
-	} else {
-		tmp = append(tmp, value)
-	}
-	idx.raw[key] = tmp
-	if key == idx.prefix {
+	if _, ok := idx.data[v.Name][v.Val]; !ok {
+		idx.data[v.Name][v.Val] = []int64{v.Pk}
 		return
 	}
-	idx.refresh()
+	idx.data[v.Name][v.Val] = append(idx.data[v.Name][v.Val], v.Pk)
 }
 
-// get index by key.
-func (idx *Index) Get(key string) []interface{} {
-	return idx.raw[key]
-}
-
-// delete value in index by key
-func (idx *Index) Del(key string, value interface{}) {
-	tmp := idx.raw[key]
-	for k, v := range tmp {
-		// use string to check equal
-		if fmt.Sprintf("%v", v) == fmt.Sprintf("%v", value) {
-			tmp = append(tmp[:k], tmp[k+1:]...)
+// delete index value in memory
+func (idx *Index) delToMem(v IndexValue) {
+	if _, ok := idx.data[v.Name]; !ok {
+		return
+	}
+	if _, ok := idx.data[v.Name][v.Val]; !ok {
+		return
+	}
+	// delete just assign pk to -1
+	// if need filtered pk slice, use cleanIndex()
+	for i, pk := range idx.data[v.Name][v.Val] {
+		if pk == v.Pk {
+			idx.data[v.Name][v.Val][i] = -1
 		}
 	}
-	idx.raw[key] = tmp
-	idx.refresh()
 }
 
-// flush index data to file.
-func (idx *Index) Flush() error {
-	return idx.s.ToFile(idx.file, idx.raw)
+// write index value to file
+func (idx *Index) putToFile(v IndexValue) (e error) {
+	bytes, e := idx.encoder.DataToBytes(v)
+	if e != nil {
+		return
+	}
+	bytes = append(bytes, indexSep...)
+	_, e = idx.fileWriters[v.Name].Write(bytes)
+	return
 }
 
-// create or read index from index file.
-func NewIndex(prefix string, file string, s Mapper) (idx *Index, e error) {
-	idx = new(Index)
-	idx.prefix = prefix
-	idx.file = file
-	idx.s = s
-	if com.IsFile(file) {
-		if e = s.FromFile(file, &idx.raw); e != nil {
-			return
-		}
-	} else {
-		idx.raw = make(map[string][]interface{})
-		idx.raw[prefix] = []interface{}{}
-		if e = s.ToFile(file, idx.raw); e != nil {
+// put value and pk to indexes.
+// it parses each index field and value in reflect.Value to each index value,
+// then put to memory and file.
+func (idx *Index) Put(pk int64, rv reflect.Value) (e error) {
+	for name, _ := range idx.files {
+		v := rv.FieldByName(name).Interface()
+		idxValue := IndexValue{name, pk, v, false}
+		e = idx.PutValue(idxValue)
+		if e != nil {
 			return
 		}
 	}
 	return
 }
 
-//--------------------------------
-
-// Pk is pk index operator.
-type Pk struct {
-	raw  []int
-	s    Mapper
-	file string
-}
-
-// put pk to index.
-func (p *Pk) Put(i int) {
-	_, b := isInIntSlice(p.raw, i)
-	if !b {
-		p.raw = append(p.raw, i)
-	}
-}
-
-// get pk position in index.
-func (p *Pk) Get(i int) (int, bool) {
-	return isInIntSlice(p.raw, i)
-}
-
-// get all pks in index.
-func (p *Pk) All() []int {
-	return p.raw
-}
-
-// delete pk in index.
-func (p *Pk) Del(i int) {
-	for k, v := range p.raw {
-		if v == i {
-			p.raw = append(p.raw[:k], p.raw[k+1:]...)
+// set pk and value to indexes.
+// it compared field value from rv reflect.Value and oldRv reflect.Value.
+// if same value, do not update.
+// if not same, delete old index with value in oldRv, put new index with value in rv.
+func (idx *Index) Set(pk int64, rv reflect.Value, oldRv reflect.Value) (e error) {
+	for name, _ := range idx.files {
+		v := rv.FieldByName(name).Interface()
+		oldV := oldRv.FieldByName(name).Interface()
+		if v == oldV {
+			continue
 		}
-	}
-}
-
-// flush pk index to file.
-func (p *Pk) Flush() error {
-	return p.s.ToFile(p.file, p.raw)
-}
-
-// create or read pk index from file.
-func NewPkIndex(file string, s Mapper) (p *Pk, e error) {
-	p = new(Pk)
-	p.s = s
-	p.file = file
-	if com.IsFile(file) {
-		if e = s.FromFile(file, &p.raw); e != nil {
+		idxV := IndexValue{name, pk, v, false}
+		if e = idx.PutValue(idxV); e != nil {
 			return
 		}
+		idxV = IndexValue{name, pk, oldV, true}
+		if e = idx.PutValue(idxV); e != nil {
+			return
+		}
+	}
+	return
+}
+
+// delete index by pk.
+// it parsed fields and values in rv and makes them as deleted.
+func (idx *Index) Del(pk int64, rv reflect.Value) (e error) {
+	for name, _ := range idx.files {
+		v := rv.FieldByName(name).Interface()
+		idxValue := IndexValue{name, pk, v, true}
+		e = idx.PutValue(idxValue)
+		if e != nil {
+			return
+		}
+	}
+	return
+}
+
+// put indexValue to memory and file.
+// it indexValue.Del is true, delete in memory.
+func (idx *Index) PutValue(v IndexValue) (e error) {
+	if v.Del {
+		idx.delToMem(v)
 	} else {
-		p.raw = []int{}
-		if e = s.ToFile(file, p.raw); e != nil {
+		idx.putToMem(v)
+	}
+	e = idx.putToFile(v)
+	return
+}
+
+// rebuild index means clean deleted indexValue in index file.
+// it writes new indexValues to a rebuild file.
+func (idx *Index) Rebuild() (e error) {
+	for name, indexes := range idx.data {
+		file := idx.files[name] + ".build"
+		os.Remove(file)
+
+		var writer *os.File
+		writer, e = os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+		if e != nil {
 			return
 		}
+		for v, pkSlice := range indexes {
+			for _, pk := range pkSlice {
+				idxV := IndexValue{name, pk, v, false}
+				bytes, e := idx.encoder.DataToBytes(idxV)
+				if e != nil {
+					return e
+				}
+				bytes = append(bytes, indexSep...)
+				_, e = writer.Write(bytes)
+				if e != nil {
+					return e
+				}
+			}
+		}
+
+		if e = writer.Sync(); e != nil {
+			return
+		}
+		if e = writer.Close(); e != nil {
+			return
+		}
+
 	}
+	return
+}
+
+// read index file.
+// it read index file bytes and decodes bytes to many indexValue.
+// then make them living in memory in proper map.
+func (idx *Index) readIdxFile(name string, file string) (e error) {
+	idx.fileWriters[name], e = os.OpenFile(file, os.O_APPEND|os.O_RDWR, os.ModePerm)
+	if e != nil {
+		return
+	}
+	bufferReader := bufio.NewReader(idx.fileWriters[name])
+	tmp := []byte{}
+	for {
+		bytes, e := bufferReader.ReadSlice('\n')
+		if e == io.EOF {
+			break
+		}
+		if e != nil {
+			return e
+		}
+		if len(bytes) == 4 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0 {
+			v := IndexValue{}
+			e = idx.encoder.DataFromBytes(tmp[:len(tmp)-1], &v)
+			if e != nil {
+				return e
+			}
+			tmp = []byte{}
+			if !v.Del {
+				idx.putToMem(v)
+			} else {
+				idx.delToMem(v)
+			}
+			continue
+		}
+		tmp = append(tmp, bytes...)
+	}
+	return
+}
+
+// clean deleted items in memory index.
+// deleted items is -1 value in pk slice.
+func (idx *Index) cleanIndex() {
+	for k, v := range idx.data {
+		for k2, pkSlice := range v {
+			tmp := []int64{}
+			for _, pk := range pkSlice {
+				if pk > 0 {
+					tmp = append(tmp, pk)
+				}
+			}
+			idx.data[k][k2] = tmp
+		}
+	}
+}
+
+// create new index with Object's indexes map, directory and encoder.
+// it not exist, it creates default empty files.
+// or read old index files.
+func NewIndex(indexes map[string]reflect.Type, directory string, encoder Encoder) (idx *Index, e error) {
+	idx = &Index{
+		data:        make(map[string]map[interface{}][]int64),
+		files:       make(map[string]string),
+		fileTypes:   indexes,
+		fileWriters: make(map[string]*os.File),
+		encoder:     encoder,
+	}
+	for name, _ := range indexes {
+		idx.files[name] = strings.ToLower(path.Join(directory, name+".idx"))
+	}
+	for name, file := range idx.files {
+		if com.IsFile(file) {
+			if e = idx.readIdxFile(name, file); e != nil {
+				return
+			}
+			continue
+		}
+		idx.fileWriters[name], e = os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+		if e != nil {
+			return
+		}
+		idx.data[name] = make(map[interface{}][]int64)
+	}
+	idx.cleanIndex()
 	return
 }
