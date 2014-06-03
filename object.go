@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Unknwon/com"
+	"io/ioutil"
+	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -71,17 +73,17 @@ func (o *Object) parseData(v interface{}) (e error) {
 
 // write increment to file
 func (o *Object) writeIncrement() (e error) {
-	_, e = com.SaveFileS(o.objFile, fmt.Sprint(o.Increment))
+	e = ioutil.WriteFile(o.objFile, []byte(fmt.Sprint(o.Increment)), os.ModePerm)
 	return
 }
 
 // read increment from file
 func (o *Object) readIncrement() (e error) {
-	str, e := com.ReadFileS(o.objFile)
+	bytes, e := ioutil.ReadFile(o.objFile)
 	if e != nil {
 		return
 	}
-	o.Increment, _ = strconv.ParseInt(str, 10, 64)
+	o.Increment, _ = strconv.ParseInt(string(bytes), 10, 64)
 	return
 }
 
