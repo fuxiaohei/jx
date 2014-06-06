@@ -1,4 +1,4 @@
-package gojx
+package jx
 
 import (
 	"crypto/rand"
@@ -36,23 +36,23 @@ func randomInt(n int) int {
 }
 
 type User struct {
-	Id       int64  `gojx:"pk"`
-	UserName string `gojx:"index"`
+	Id       int64  `jx:"pk"`
+	UserName string `jx:"index"`
 	Password string
-	Email    string `gojx:"index"`
+	Email    string `jx:"index"`
 }
 
 type School struct {
-	Id      int64 `gojx:"pk"`
+	Id      int64 `jx:"pk"`
 	Address string
-	Rank    int `gojx:"index"`
+	Rank    int `jx:"index"`
 }
 
 type Student struct {
-	No    int64 `gojx:"pk"`
+	No    int64 `jx:"pk"`
 	Name  string
-	Class string `gojx:"index"`
-	Grade string `gojx:"index"`
+	Class string `jx:"index"`
+	Grade string `jx:"index"`
 }
 
 func init() {

@@ -1,19 +1,19 @@
-#gojx
+#jx
 
 
-### gojx - a simple storage engine by Golang.
+### jx - a simple storage engine by Golang.
 
-gojx is a storage engine use simple kv map as documentation. It provides simple api methods to operate value in storage.
+jx is a storage engine use simple kv map as documentation. It provides simple api methods to operate value in storage.
 It can be used as *embedded* storage.
 
 ### Getting Started
 
-`gojx` saves real data in files. so create a `*gojx.Storage` in directory.
+`jx` saves real data in files. so create a `*jx.Storage` in directory.
 
 ```go
-import "github.com/fuxiaohei/gojx"
+import "github.com/fuxiaohei/jx"
 
-s,e := gojx.New(gojx.StorageConfig{Dir: directory, Encoder: new(gojx.GobEncoder),Size:5000,Optimize:true})
+s,e := jx.New(jx.StorageConfig{Dir: directory, Encoder: new(jx.GobEncoder),Size:5000,Optimize:true})
 if e != nil{
     panic(e) // remember error
 }
@@ -21,7 +21,7 @@ if e != nil{
 
 `StorageConfig` defines storage options.
 
-`Dir` is storage saving directory. `Encoder` is value encoder, implements of `gojx.Encoder` interface.
+`Dir` is storage saving directory. `Encoder` is value encoder, implements of `jx.Encoder` interface.
 `Size` means how many items of value in each data file.
 `Optimize` means to replace optimized file ( clean deleted marked data ) to raw data file.
 
@@ -31,25 +31,25 @@ Then register a struct to storage. So far storage can save the struct value.
 
 ```go
 type User struct {
-	Id       int    `gojx:"pk"`
-	UserName string `gojx:"index"`
+	Id       int    `jx:"pk"`
+	UserName string `jx:"index"`
 	Password string
-	Email    string `gojx:"index"`
+	Email    string `jx:"index"`
 }
 
 type School struct {
-	Id      int `gojx:"pk"`
+	Id      int `jx:"pk"`
 	Address string
-	Rank    int `gojx:"index"`
+	Rank    int `jx:"index"`
 }
 
 e := s.Sync(new(User),new(School))
 
 ```
 
-`gojx:"pk"` means primary key for this value, only support **int** type.
+`jx:"pk"` means primary key for this value, only support **int** type.
 
-`gojx:"index"` means index for this value, support basic types. If field is `index`, storage can query data by condition with value in this field.
+`jx:"index"` means index for this value, support basic types. If field is `index`, storage can query data by condition with value in this field.
 
 ##### 2. Put
 
@@ -75,7 +75,7 @@ u := new(User)
 u.Id = 999
 //.....
 e := s.Put(u)   // u.Id is 999, the next putting value without pk is 1000.
-if e == gojx.CONFLICT{
+if e == jx.CONFLICT{
     println("put existing data")  // can not put a same pk data, change value use s.Set(u)
 }
 
@@ -92,7 +92,7 @@ get value by pk :
 ```go
 u := &User{Id:100}
 e := s.Get(u)
-if e == gojx.NULL{
+if e == jx.NULL{
     println("get no data")
 }else{
     println(u.UserName) // if found, field is filled.
@@ -119,7 +119,7 @@ u.Password = "9876543"
 u.Email = "xyz@abc.com"
 
 e := s.Set(u)
-if e == gojx.NULL{
+if e == jx.NULL{
     // update not-exist data
 }
 ```
@@ -133,7 +133,7 @@ u := new(User)
 u.Id = 1
 
 e := s.Del(u)
-if e == gojx.NULL{
+if e == jx.NULL{
     // delete not-exist data
 }
 ```

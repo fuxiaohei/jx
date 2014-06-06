@@ -1,4 +1,4 @@
-package gojx
+package jx
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package gojx
+package jx
 
 import (
 	"errors"
@@ -50,7 +50,7 @@ func (o *Object) parseData(v interface{}) (e error) {
 	numField := rt.NumField()
 	for i := 0; i < numField; i++ {
 		rf := rt.Field(i)
-		tag := rf.Tag.Get("gojx")
+		tag := rf.Tag.Get("jx")
 		if len(tag) < 1 || tag == "-" {
 			continue
 		}
