@@ -2,13 +2,17 @@ package jx
 
 import "reflect"
 
-func getPk(rv reflect.Value, pk string) int64 {
-	if rv.Kind() != reflect.Struct {
-		return -1
+// is string,int64 or float64 type.
+func isBaseType(k reflect.Kind) bool {
+	return k == reflect.String || k == reflect.Int64 || k == reflect.Float64
+}
+
+// get reflect type of struct value.
+// indirect to pointer inner.
+func getReflectType(v interface{}) reflect.Type {
+	rt := reflect.TypeOf(v)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
 	}
-	rf := rv.FieldByName(pk)
-	if !rf.IsValid() || rf.Kind() != reflect.Int64 {
-		return -1
-	}
-	return rf.Int()
+	return rt
 }

@@ -1,106 +1,79 @@
 package jx
 
 import (
-	"errors"
 	"fmt"
-	"github.com/Unknwon/com"
-	"io/ioutil"
-	"os"
-	"path"
 	"reflect"
-	"strconv"
-	"strings"
 )
 
-// Object is struct definition for storage.
-// it saves object's pk, index and increment data.
 type Object struct {
-	DataType  reflect.Type
-	Pk        string
-	Indexes   map[string]reflect.Type
-	Increment int64
-	objFile   string
+	DataType reflect.Type
+
+	Pk     string
+	PkType reflect.Type
+	PkAuto bool
+
+	Index map[string]reflect.Type
 }
 
-// SetPk to value.
-// it pk is over Object.Increment use pk.
-// or use Object.Increment.
-func (o *Object) SetPk(v reflect.Value) (pk int64, e error) {
-	pk = getPk(v, o.Pk)
-	if pk <= o.Increment {
-		o.Increment++
-		pk = o.Increment
-		v.FieldByName(o.Pk).SetInt(pk)
-	} else {
-		o.Increment = pk
-	}
-	return pk, o.writeIncrement()
-}
-
-// parse value to object fields
-func (o *Object) parseData(v interface{}) (e error) {
+// create new object from value.
+// pk field need int64,float64 or string.
+// auto pk field need int64.
+// pk field must be set.
+func NewObject(v interface{}) (obj *Object, e error) {
+	// parse value reflect type.
+	// need struct pointer.
 	rt := reflect.TypeOf(v)
-	if rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-	}
-	if rt.Kind() != reflect.Struct {
-		e = errors.New(rt.String() + " need be struct")
+	if rt.Kind() != reflect.Ptr || rt.Elem().Kind() != reflect.Struct {
+		e = fmt.Errorf("object need struct pointer : %s", rt.String())
 		return
+
 	}
-	numField := rt.NumField()
-	for i := 0; i < numField; i++ {
-		rf := rt.Field(i)
-		tag := rf.Tag.Get("jx")
-		if len(tag) < 1 || tag == "-" {
+	rt = rt.Elem()
+
+	obj = &Object{
+		DataType: rt,
+		Index:    make(map[string]reflect.Type),
+	}
+
+	num := rt.NumField()
+	// parse field
+	for i := 0; i < num; i++ {
+		field := rt.Field(i)
+		tag := field.Tag.Get("jx")
+
+		// pk
+		if tag == "pk" {
+			if !isBaseType(field.Type.Kind()) {
+				e = fmt.Errorf("pk field need string, int64 or float64 : %s,%s", rt.String(), field.Name)
+				return
+			}
+			obj.Pk = field.Name
+			obj.PkType = field.Type
+			obj.PkAuto = false
 			continue
 		}
-		if tag == "pk" && rf.Type.Kind() == reflect.Int64 {
-			o.Pk = rf.Name
+
+		// auto pk
+		if tag == "pk-auto" {
+			if field.Type.Kind() != reflect.Int64 {
+				e = fmt.Errorf("auto pk field need int64 : %s,%s", rt.String(), field.Name)
+				return
+			}
+			obj.Pk = field.Name
+			obj.PkType = field.Type
+			obj.PkAuto = true
 			continue
 		}
+
+		// index
 		if tag == "index" {
-			o.Indexes[rf.Name] = rf.Type
+			obj.Index[field.Name] = field.Type
 			continue
 		}
-	}
-	if len(o.Pk) < 1 {
-		e = errors.New(rt.String() + " need pk int64 field")
-		return
-	}
-	o.DataType = rt
-	return
-}
 
-// write increment to file
-func (o *Object) writeIncrement() (e error) {
-	e = ioutil.WriteFile(o.objFile, []byte(fmt.Sprint(o.Increment)), os.ModePerm)
-	return
-}
-
-// read increment from file
-func (o *Object) readIncrement() (e error) {
-	bytes, e := ioutil.ReadFile(o.objFile)
-	if e != nil {
-		return
 	}
-	o.Increment, _ = strconv.ParseInt(string(bytes), 10, 64)
-	return
-}
-
-// create new object from value and directory.
-func NewObject(v interface{}, directory string) (o *Object, e error) {
-	o = &Object{
-		Indexes: make(map[string]reflect.Type),
+	if len(obj.Pk) < 1 {
+		e = fmt.Errorf("need pk field : %s", rt.String())
 	}
-	if e = o.parseData(v); e != nil {
-		return
-	}
-	o.objFile = path.Join(directory, strings.ToLower(o.DataType.String()+".obj"))
-	if com.IsFile(o.objFile) {
-		e = o.readIncrement()
-		return
-	}
-	o.Increment = 0
-	e = o.writeIncrement()
 	return
 }

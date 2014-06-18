@@ -1,156 +1,116 @@
 package jx
 
 import (
-	"crypto/rand"
+	"bytes"
+	"math/rand"
 	"os"
-	"reflect"
-	"strconv"
 	"testing"
+	"time"
 )
 
 var (
-	s          *Storage
-	insertSize = 1666
-	directory  = "_test"
+	s *Storage
 )
 
-func randomString(n int) string {
-	const letters = "abc"
-	var bytes = make([]byte, n)
-	rand.Read(bytes)
-	for i, b := range bytes {
-		bytes[i] = letters[b%byte(len(letters))]
-	}
-	return string(bytes)
-}
-
-func randomInt(n int) int {
-	const nums = "0123456789"
-	var bytes = make([]byte, n)
-	rand.Read(bytes)
-	for i, b := range bytes {
-		bytes[i] = nums[b%byte(len(nums))]
-	}
-	res, _ := strconv.Atoi(string(bytes))
-	return res
-}
-
 type User struct {
-	Id       int64  `jx:"pk"`
-	UserName string `jx:"index"`
-	Password string
-	Email    string `jx:"index"`
-}
-
-type School struct {
-	Id      int64 `jx:"pk"`
-	Address string
-	Rank    int `jx:"index"`
-}
-
-type Student struct {
-	No    int64 `jx:"pk"`
+	Id    int64 `jx:"pk-auto"`
 	Name  string
-	Class string `jx:"index"`
-	Grade string `jx:"index"`
+	Email string
+	Sex   string
+	Age   int
+}
+
+func randomString(l int) string {
+	var result bytes.Buffer
+	var temp string
+	for i := 0; i < l; {
+		if string(randInt(65, 90)) != temp {
+			temp = string(randInt(65, 90))
+			result.WriteString(temp)
+			i++
+		}
+	}
+	return result.String()
+}
+
+func randInt(min int, max int) int {
+	return min + rand.Intn(max - min)
 }
 
 func init() {
-	os.RemoveAll(directory)
-
-	var e error
-	s, e = New(StorageConfig{Dir: directory, Encoder: new(GobEncoder)})
-	if e != nil {
-		panic(e)
-	}
-	e = s.Sync(new(User))
+	rand.Seed(time.Now().UTC().UnixNano())
+	e := os.RemoveAll("_test")
 	if e != nil {
 		panic(e)
 	}
 
-	for i := 0; i < insertSize; i++ {
-		user := new(User)
-		user.UserName = randomString(3)
-		user.Email = randomString(12)
-		user.Password = randomString(10)
-		if e = s.Put(user); e != nil {
+	s, e = NewStorage("_test")
+	if e != nil {
+		panic(e)
+	}
+	if e = s.Sync(new(User)); e != nil {
+		panic(e)
+	}
+
+	for i := 0; i < 99; i++ {
+		u := &User{
+			Name:  randomString(8),
+			Email: randomString(20),
+			Sex:   randomString(1),
+			Age:   randInt(1, 99),
+		}
+		e = s.Insert(u)
+		if e != nil {
 			panic(e)
 		}
 	}
 
-	e = s.Flush()
+	// wait one second for pk chan
+	time.Sleep(1 * time.Second)
+
+	// flush storage, reload
+	s = nil
+	s, e = NewStorage("_test")
 	if e != nil {
+		panic(e)
+	}
+	if e = s.Sync(new(User)); e != nil {
 		panic(e)
 	}
 
-	// reload
-	s, e = New(StorageConfig{Dir: directory, Encoder: new(GobEncoder)})
-	if e != nil {
-		panic(e)
-	}
-	e = s.Sync(new(User))
-	if e != nil {
-		panic(e)
-	}
 }
 
-func printError(t *testing.T, name string, except, got interface{}) {
-	t.Errorf("%s: (Except => %v) (Got => %v)", name, except, got)
-}
-
-func TestPut(t *testing.T) {
-	user := new(User)
-	user.UserName = randomString(3)
-	user.Email = randomString(12)
-	user.Password = randomString(10)
-	e := s.Put(user)
+func TestInsert(t *testing.T) {
+	u := &User{
+		Name:  "ababab",
+		Email: randomString(20),
+		Sex:   randomString(1),
+		Age:   randInt(1, 99),
+	}
+	e := s.Insert(u)
 	if e != nil {
 		t.Error(e)
 		return
 	}
-	if user.Id != 1667 {
-		printError(t, "Put", 1667, user.Id)
-		return
-	}
-
-	user = new(User)
-	user.Id = 1999
-	user.UserName = randomString(3)
-	user.Email = randomString(12)
-	user.Password = randomString(10)
-	e = s.Put(user)
-	if e != nil {
-		t.Error(e)
-		return
-	}
-	obj := s.Objects[reflect.TypeOf(User{}).String()]
-	if obj.Increment != 1999 {
-		printError(t, "PutOverMax", 1999, obj.Increment)
-		return
-	}
-
-	user = new(User)
-	user.UserName = randomString(3)
-	user.Email = randomString(12)
-	user.Password = randomString(10)
-	e = s.Put(user)
-	if e != nil {
-		t.Error(e)
-		return
-	}
-	if user.Id != 2000 {
-		printError(t, "PutAfterOverMax", 2000, user.Id)
+	if u.Id != 100 {
+		t.Errorf("expect uid %d, but got %d", 100, u.Id)
 		return
 	}
 }
 
-func BenchmarkPut(b *testing.B) {
-	user := new(User)
-	user.UserName = randomString(3)
-	user.Email = randomString(12)
-	user.Password = randomString(10)
+func BenchmarkInsert(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		s.Put(user)
+		u := &User{
+			Name:  randomString(8),
+			Email: randomString(20),
+			Sex:   randomString(1),
+			Age:   randInt(1, 99),
+		}
+		e := s.Insert(u)
+		if e != nil {
+			b.Error(e)
+			return
+		}
 	}
 }
 
@@ -161,89 +121,83 @@ func TestGet(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	if len(u.UserName) != 3 || len(u.Email) != 12 {
-		printError(t, "Get", u.UserName+":"+u.Email, nil)
-		return
+	if u.Name != "ababab" {
+		t.Errorf("expect name %s, but got %s", "ababab", u.Name)
 	}
 }
 
 func BenchmarkGet(b *testing.B) {
-	u := &User{Id: 99}
+	u := &User{Id: 9}
 	for i := 0; i < b.N; i++ {
-		s.Get(u)
+		e := s.Get(u)
+		if e != nil {
+			b.Error(e)
+		}
 	}
 }
 
 func TestUpdate(t *testing.T) {
-	user := new(User)
-	user.Id = 9999
-	user.UserName = "aaa"
-	user.Email = randomString(12)
-	user.Password = randomString(10)
-	e := s.Set(user)
-	if e != NULL {
-		printError(t, "UpdateNonExist", NULL, e)
-		return
+	u := &User{
+		Id:    100,
+		Name:  "xxxxxx",
+		Email: randomString(20),
+		Sex:   randomString(1),
+		Age:   randInt(1, 99),
 	}
-
-	user.Id = 9
-	e = s.Set(user)
-	if e != nil {
-		printError(t, "Update", nil, e)
-		return
-	}
-
-	user2 := new(User)
-	user2.Id = 9
-	e = s.Get(user2)
+	e := s.Update(u)
 	if e != nil {
 		t.Error(e)
 		return
 	}
-	if user2.UserName != "aaa" {
-		printError(t, "UpdateThenGet", "aaa", user2.UserName)
+	// get updated item
+	u2 := &User{Id: 100}
+	e = s.Get(u2)
+	if e != nil {
+		t.Error(e)
 		return
+	}
+	if u2.Name != "xxxxxx" {
+		t.Errorf("expect name %s, but got %s", "xxxxxx", u2.Name)
 	}
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	user := new(User)
-	user.Id = 99
-	user.UserName = randomString(3)
-	user.Email = randomString(12)
-	user.Password = randomString(10)
+	u := &User{
+		Id:    9,
+		Name:  "xxxxxx",
+		Email: randomString(20),
+		Sex:   randomString(1),
+		Age:   randInt(1, 99),
+	}
 	for i := 0; i < b.N; i++ {
-		s.Set(user)
+		e := s.Update(u)
+		if e != nil {
+			b.Error(e)
+			return
+		}
 	}
 }
 
 func TestDelete(t *testing.T) {
-	user := new(User)
-	user.Id = 9999
-	e := s.Del(user)
-	if e != NULL {
-		printError(t, "DeleteNonExist", NULL, e)
-		return
-	}
-
-	user.Id = 9
-	e = s.Del(user)
+	u := &User{Id: 100}
+	e := s.Delete(u)
 	if e != nil {
 		t.Error(e)
 		return
 	}
-	e = s.Get(user)
-	if e != NULL {
-		printError(t, "Delete", NULL, e)
-		return
+	e = s.Get(u)
+	if e != Nil {
+		t.Errorf("expect nil, but got %s", e)
 	}
 }
 
 func BenchmarkDelete(b *testing.B) {
-	user := new(User)
-	user.Id = 0
 	for i := 0; i <= b.N; i++ {
-		user.Id = int64(i + 1)
-		s.Del(user)
+		u := &User{Id: int64(i + 1)}
+		e := s.Delete(u)
+		if e != nil {
+			b.Error(e)
+			return
+		}
 	}
 }

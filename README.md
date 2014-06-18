@@ -1,139 +1,133 @@
 #jx
 
 
-### jx - a simple storage engine by Golang.
+## jx - a simple json storage engine by Golang.
 
-jx is a storage engine use simple kv map as documentation. It provides simple api methods to operate value in storage.
+jx is a storage engine use simple json by kv map encoded as documentation. It provides simple api methods to operate value in storage.
 It can be used as *embedded* storage.
 
 ### Getting Started
 
 `jx` saves real data in files. so create a `*jx.Storage` in directory.
 
-```go
-import "github.com/fuxiaohei/jx"
+    import "github.com/fuxiaohei/jx"
+    
+    s,e := jx.NewStorage("data")
+    if e != nil{
+        panic(e) // remember error
+    }
 
-s,e := jx.New(jx.StorageConfig{Dir: directory, Encoder: new(jx.GobEncoder),Size:5000,Optimize:true})
-if e != nil{
-    panic(e) // remember error
-}
-```
+It creates storage directory for saving data. *But* it doesn't load existing data now.
 
-`StorageConfig` defines storage options.
+#### 1. Sync
 
-`Dir` is storage saving directory. `Encoder` is value encoder, implements of `jx.Encoder` interface.
-`Size` means how many items of value in each data file.
-`Optimize` means to replace optimized file ( clean deleted marked data ) to raw data file.
-
-##### 1. Register
-
-Then register a struct to storage. So far storage can save the struct value.
-
-```go
-type User struct {
-	Id       int    `jx:"pk"`
-	UserName string `jx:"index"`
-	Password string
-	Email    string `jx:"index"`
-}
-
-type School struct {
-	Id      int `jx:"pk"`
-	Address string
-	Rank    int `jx:"index"`
-}
-
-e := s.Sync(new(User),new(School))
-
-```
-
-`jx:"pk"` means primary key for this value, only support **int** type.
-
-`jx:"index"` means index for this value, support basic types. If field is `index`, storage can query data by condition with value in this field.
-
-##### 2. Put
-
-put a new value into storage:
-
-```go
-u := new(User)
-u.UserName = "abcdef"
-u.Password = "12345678"
-u.Email = "abcdef@xyz.com"
-
-e := s.Put(u) // u.Id is 1, as first one. remember error.
-```
-
-**Put** only support **struct pointer**.
-
-The pk field `u.Id` is assigned as max in storage. Pk is auto increment one by one.
-
-If you set `u.Id` is over max value in storage, use `u.Id` as max , then increase pk for next putting.
-
-```go
-u := new(User)
-u.Id = 999
-//.....
-e := s.Put(u)   // u.Id is 999, the next putting value without pk is 1000.
-if e == jx.CONFLICT{
-    println("put existing data")  // can not put a same pk data, change value use s.Set(u)
-}
-
-u2 := new(User)
-u.Id = 666
-//......
-e = s.Put(u)  // u.Id is < 999, so use 1000 as u.Id not 666.
-```
-
-##### 3. Get
-
-get value by pk : 
-
-```go
-u := &User{Id:100}
-e := s.Get(u)
-if e == jx.NULL{
-    println("get no data")
-}else{
-    println(u.UserName) // if found, field is filled.
-}
+Then sync a struct to storage, so storage can save the struct value.
 
 
-```
+    type User struct {
+        Id       int64    `jx:"pk-auto"`
+        UserName string 
+        Password string
+        Email    string 
+    }
+    
+    type School struct {
+        Id      int64 `jx:"pk"`
+        Address string
+        Rank    int 
+    }
+    
+    e := s.Sync(new(User),new(School))
+
+`s.Sync(...)` only support struct pointer type.
+
+`jx:"pk"` means primary key for this field, only support **int64, string, float64** type.
+
+`jx:"pk-auto"` means auto-increment primary key for this field, only support **int64** type.Insert
+
+The pk field is unique, so if two "pk" tag in struct, the last one is assigned.
+
+**Notice:**
+
+When sync a struct, it creates default data files if not exist yet.
+
+Or it reads old data for memory as preparation.
+
+#### 2. Insert
+
+Insert a new struct value into storage:
+
+    u := new(User)
+    u.UserName = "abcdef"
+    u.Password = "12345678"
+    u.Email = "abcdef@xyz.com"
+    
+    e := s.Put(u) // u.Id is auto increasing.
+    
+
+**Insert** only support **struct pointer**.
+
+The pk field `u.Id` is assigned as max id in storage and increasing one by one.
+
+If `pk-auto` tag, no matter the pk you set in struct, use storage max pk int.
+
+    s := new(School)
+    s.Id = 123
+    s.Address = "address"
+    S.Rank = 4
+    
+    e := s.Put(s) // pk field 
+    if e == jx.Conflict{
+        // means the pk is used in storage.
+    }
+    if e == jx.Wrong{
+        // means the pk field is wrong value, type error and empty
+    }
+
+When `s.Insert(u)`, it checks pk field value unique. 
+
+Then write data to chunk files.
+
+
+#### 3. Get
+
+Now only support get value by pk field 
+
+
+    u := &User{Id:100}
+    e := s.Get(u)
+    if e == jx.Nil{
+        println("get no data")
+    }else{
+        println(u.UserName) // if found, field is filled.
+    }
+
 
 **Get** only support **struct pointer** and by **pk field**.
 
-If value is not registered, return error.
+If value is not synced, return error.
 
 If value is found, `u` is filled by value.
 
-##### 4. Set
+##### 4. Update
 
-set is used to update value by pk:
+Only support update value by pk field:
 
-```go
-u := new(User)
-u.Id = 1
-u.UserName = "mnopq"
-u.Password = "9876543"
-u.Email = "xyz@abc.com"
+    u := new(User)
+    u.Id = 1
+    u.UserName = "mnopq"
+    u.Password = "9876543"
+    u.Email = "xyz@abc.com"
+    
+    e := s.Update(u)
 
-e := s.Set(u)
-if e == jx.NULL{
-    // update not-exist data
-}
-```
 
 ##### 5. Delete
 
-delete value by pk:
+Delete value by pk:
 
-```go
-u := new(User)
-u.Id = 1
+    u := new(User)
+    u.Id = 1
+    
+    e := s.Delete(u)
 
-e := s.Del(u)
-if e == jx.NULL{
-    // delete not-exist data
-}
-```
