@@ -171,6 +171,16 @@ func (t *Table) firstInit() (e error) {
 	return
 }
 
+// optimize table data.
+// chunk and pk are all optimized.
+func (t *Table) Optimize() (e error) {
+	if e = t.Pk.Optimize(); e != nil {
+		return
+	}
+	e = t.Chunk.Optimize()
+	return
+}
+
 // create new table in directory with object definition.
 func NewTable(directory string, obj *Object) (t *Table, e error) {
 	t = &Table{

@@ -134,6 +134,10 @@ func (c *Chunk) Write(v interface{}) (uid int64, cursor int, e error) {
 	c.data[cursor][uid] = v
 	// try move to next if over limit
 	if c.limit < len(c.data[c.current]) {
+		// sync current file
+		c.files[c.current].Sync()
+
+		// rand a new cursor as current
 		c.randCursor()
 		c.files[c.current], e = os.OpenFile(c.GetFile(c.current), os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
 		c.data[c.current] = make(map[int64]interface{})
@@ -172,14 +176,20 @@ func (c *Chunk) Update(v interface{}, pk *PkValue) (e error) {
 }
 
 // write bytes to file.
-// build bytes header.
+// build bytes header and a random unique id int64.
 func (c *Chunk) writeBytes(cursor int, b []byte) (uid int64, e error) {
 	uid = rand.Int63()
+	e = c.writeBytesWithUid(c.files[cursor], uid, b)
+	return
+}
+
+// write bytes to file with unique id.
+func (c *Chunk) writeBytesWithUid(writer *os.File, uid int64, b []byte) (e error) {
 	var buf bytes.Buffer
 	buf.Write(int64ToBytes(int64(len(b))))
 	buf.Write(int64ToBytes(uid))
 	buf.Write(b)
-	_, e = c.files[cursor].Write(buf.Bytes())
+	_, e = writer.Write(buf.Bytes())
 	return
 }
 
@@ -214,6 +224,39 @@ func (c *Chunk) init() (e error) {
 			return
 		}
 		c.data[c.current] = make(map[int64]interface{})
+	}
+	return
+}
+
+// optimize chunk data.
+// it pulls all memory data to opm file.
+// notice just loaded chunk file will be optimized.
+func (c *Chunk) Optimize() (e error) {
+	for cursor, data := range c.data {
+		// if < 10% items, no need to optimize
+		if len(data) < c.limit/10 {
+			continue
+		}
+		opmFile := c.GetFile(cursor) + ".opm"
+		fileWriter, e := os.OpenFile(opmFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, os.ModePerm)
+		if e != nil {
+			return e
+		}
+		for uid, v := range data {
+			// encode
+			bytes, e := json.Marshal(v)
+			if e != nil {
+				return e
+			}
+			// write to file
+			e = c.writeBytesWithUid(fileWriter, uid, bytes)
+			if e != nil {
+				return e
+			}
+		}
+		// do not keep file handler
+		fileWriter.Sync()
+		fileWriter.Close()
 	}
 	return
 }

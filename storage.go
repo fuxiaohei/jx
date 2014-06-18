@@ -86,6 +86,17 @@ func (s *Storage) Sync(value ...interface{}) (e error) {
 	return
 }
 
+// optimize storage data.
+// clean deleted data and pk.
+func (s *Storage) Optimize() (e error) {
+	for _, tbl := range s.tables {
+		if e = tbl.Optimize(); e != nil {
+			return
+		}
+	}
+	return
+}
+
 // create storage in directory.
 // it doesn't load data,
 // util call Sync(...) to load data.

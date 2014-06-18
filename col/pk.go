@@ -23,7 +23,6 @@ type PK struct {
 	file      *os.File
 
 	autoFile string
-	autoChan chan int64
 	autoId   int64
 	auto     bool
 
@@ -48,7 +47,7 @@ func (p *PK) SetPk(v interface{}, field string) (pk interface{}, e error) {
 		if e == nil {
 			pk = p.autoId
 		}
-	}else {
+	} else {
 		// make sure pk is not empty. but 0 is valid.
 		if fmt.Sprint(pk) == "" {
 			e = PkEmpty
@@ -82,7 +81,7 @@ func (p *PK) Delete(pk interface{}) (e error) {
 	if e != nil {
 		return
 	}
-	e = p.writeBytes(bytes)
+	e = p.writeBytes(bytes, p.file)
 	if e == nil {
 		// delete in memory
 		delete(p.data, pkValue.Value)
@@ -150,7 +149,7 @@ func (p *PK) Write(pk interface{}, cursor int, uid int64, del int) (e error) {
 	if e != nil {
 		return
 	}
-	e = p.writeBytes(bytes)
+	e = p.writeBytes(bytes, p.file)
 	if e == nil {
 		p.data[pkValue.Value] = pkValue
 	}
@@ -172,11 +171,11 @@ func (p *PK) Update(pk interface{}, pkV *PkValue) (e error) {
 
 // write bytes to file.
 // build bytes with header byte.
-func (p *PK) writeBytes(b []byte) (e error) {
+func (p *PK) writeBytes(b []byte, writer *os.File) (e error) {
 	var buf bytes.Buffer
 	buf.Write(int64ToBytes(int64(len(b))))
 	buf.Write(b)
-	_, e = p.file.Write(buf.Bytes())
+	_, e = writer.Write(buf.Bytes())
 	return
 }
 
@@ -240,6 +239,30 @@ func (p *PK) init() (e error) {
 	return
 }
 
+// optimize pk value to opm file.
+// clean delete items.
+func (p *PK) Optimize() (e error) {
+	optFile := path.Join(p.directory, "pk.pk.opm")
+
+	fileWriter, e := os.OpenFile(optFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, os.ModePerm)
+	if e != nil {
+		return
+	}
+
+	// pull all memory pk data to opm file.
+	for _, pkValue := range p.data {
+		bytes, e := json.Marshal(pkValue)
+		if e != nil {
+			return e
+		}
+		if e = p.writeBytes(bytes, fileWriter); e != nil {
+			return e
+		}
+	}
+
+	return
+}
+
 // create new pk in directory with pk auto-increment setting.
 func NewPk(directory string, auto bool) (p *PK, e error) {
 	p = &PK{
@@ -251,6 +274,7 @@ func NewPk(directory string, auto bool) (p *PK, e error) {
 	return
 }
 
+// PkValue defines the each pk item data struct.
 type PkValue struct {
 	Value  string `json:"v"`
 	Uid    int64  `json:"u,omitempty"`
