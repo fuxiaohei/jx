@@ -10,7 +10,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 var (
@@ -220,6 +222,11 @@ func (p *PK) init() (e error) {
 		return p.firstInit()
 	}
 
+	// try to use optimized files
+	if e = p.tryOptimized(); e != nil {
+		return
+	}
+
 	// read auto increment
 	if p.auto {
 		p.autoFile = path.Join(p.directory, "auto.pk")
@@ -241,6 +248,39 @@ func (p *PK) init() (e error) {
 	}
 	e = nil
 
+	return
+}
+
+func (p *PK) tryOptimized() (e error) {
+	files, e := filepath.Glob(filepath.Join(p.directory, "*.opm"))
+	if e != nil {
+		return
+	}
+	if len(files) < 1 {
+		return
+	}
+	for _, f := range files {
+		// compare opm file and original file
+		originFile := strings.TrimSuffix(f, ".opm")
+		fi, _ := os.Stat(f)
+		ofi, _ := os.Stat(originFile)
+		if fi == nil || ofi == nil {
+			continue
+		}
+
+		// if opm file is newer, replace to original file
+		if fi.ModTime().Sub(ofi.ModTime()) > 1 {
+			if e = os.RemoveAll(originFile); e != nil {
+				return
+			}
+			if e = os.Rename(f, originFile); e != nil {
+				return
+			}
+			if e = os.RemoveAll(f); e != nil {
+				return
+			}
+		}
+	}
 	return
 }
 

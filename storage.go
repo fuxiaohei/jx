@@ -22,7 +22,7 @@ type Storage struct {
 
 // get struct table.
 // the struct must be synced.
-func (s *Storage) Table(v interface {})*Table{
+func (s *Storage) Table(v interface{}) *Table {
 	return s.tables[getReflectType(v)]
 }
 
