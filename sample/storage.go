@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/fuxiaohei/jx"
 	"fmt"
+	"github.com/fuxiaohei/jx"
 	"time"
 )
 
@@ -25,7 +25,7 @@ type Group struct {
 // todo : complete GroupUser
 
 var (
-	s *jx.Storage
+	s     *jx.Storage
 	start = time.Now()
 )
 
@@ -46,7 +46,7 @@ func init() {
 	}
 
 	// try to get first one
-	u := &User{Id:1} // use struct pointer &User{}
+	u := &User{Id: 1} // use struct pointer &User{}
 	e = s.Get(u)
 	if e != nil && e != jx.Nil {
 		panic(e)
@@ -64,12 +64,12 @@ func init() {
 func initData() {
 	for i := 0; i < 1456; i++ {
 		u := &User{
-			Name:randomString(6),
-			Password:randomString(12),
-			Email:randomString(20),
-			Sex:randomString(1),
-			Age:randInt(1, 99),
-			Bio:randomString(100),
+			Name:     randomString(6),
+			Password: randomString(12),
+			Email:    randomString(20),
+			Sex:      randomString(1),
+			Age:      randInt(1, 99),
+			Bio:      randomString(100),
 		}
 		e := s.Insert(u)
 		if e != nil {
@@ -78,9 +78,9 @@ func initData() {
 	}
 	for i := 0; i < 98; i++ {
 		g := &Group{
-			Name:randomString(4),
-			Bio:randomString(50),
-			UserCount:0,
+			Name:      randomString(4),
+			Bio:       randomString(50),
+			UserCount: 0,
 		}
 		e := s.Insert(g)
 		if e != nil && e != jx.Conflict {
@@ -90,6 +90,7 @@ func initData() {
 }
 
 func main() {
+	// return
 
 	// insert sample ----------------------
 	fmt.Println("inserting ----------------- ")
@@ -100,12 +101,12 @@ func main() {
 	currentCursor := s.Table(new(User)).Chunk.GetCurrent()
 	for i := 0; i < 1111; i++ {
 		u := &User{
-			Name:randomString(6),
-			Password:randomString(12),
-			Email:randomString(20),
-			Sex:randomString(1),
-			Age:randInt(1, 99),
-			Bio:randomString(100),
+			Name:     randomString(6),
+			Password: randomString(12),
+			Email:    randomString(20),
+			Sex:      randomString(1),
+			Age:      randInt(1, 99),
+			Bio:      randomString(100),
 		}
 		e := s.Insert(u)
 		if e != nil {
@@ -126,7 +127,7 @@ func main() {
 	for i := 0; i <= 99; i++ {
 		// random an id between 1 and max
 		id := randInt(1, int(maxId))
-		u := &User{Id:int64(id)}
+		u := &User{Id: int64(id)}
 		e := s.Get(u)
 		if e != nil {
 			if e == jx.Nil {
@@ -144,24 +145,23 @@ func main() {
 
 	// we had max id of users data. so we can update one by random id.
 	fmt.Println("let's update 99 times")
-	for i:=0;i<=99;i++{
-		id := randInt(1,int(maxId))
+	for i := 0; i <= 99; i++ {
+		id := randInt(1, int(maxId))
 		u := &User{
-			Id:int64(id),
-			Name:randomString(6),
-			Password:randomString(12),
-			Email:randomString(20),
-			Sex:randomString(1),
-			Age:randInt(1, 99),
-			Bio:randomString(100),
+			Id:       int64(id),
+			Name:     randomString(6),
+			Password: randomString(12),
+			Email:    randomString(20),
+			Sex:      randomString(1),
+			Age:      randInt(1, 99),
+			Bio:      randomString(100),
 		}
-		e :=s.Update(u)
-		if e != nil{
+		e := s.Update(u)
+		if e != nil {
 			panic(e)
 		}
 	}
 	fmt.Println("update all true")
-
 
 	// delete sample ---------------
 	fmt.Println("deleting -------------")
@@ -171,11 +171,21 @@ func main() {
 	for i := 0; i <= 99; i++ {
 		// random an id between 1 and max
 		id := randInt(1, int(maxId))
-		u := &User{Id:int64(id)}
+		u := &User{Id: int64(id)}
 		e := s.Delete(u)
 		if e != nil {
 			panic(e)
 		}
 	}
-	fmt.Println("delte all true")
+
+	// optimize sample -------------
+	fmt.Println("optimizing --------------")
+	time.Sleep(3 * time.Second) // sleep 3 second to make sure optimized file is clearly newer than old file.
+
+	// after update and delete something, many rest data are saving in files.
+	// so we can optimize files to clean them.
+	e := s.Optimize()
+	if e != nil {
+		panic(e)
+	}
 }

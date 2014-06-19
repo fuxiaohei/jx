@@ -9,8 +9,10 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type Chunk struct {
@@ -224,6 +226,42 @@ func (c *Chunk) init() (e error) {
 			return
 		}
 		c.data[c.current] = make(map[int64]interface{})
+	}
+	e = c.tryOptimized()
+	return
+}
+
+// try optimized means replace data file with .opm file,
+// if the .opm file is newer than data file, comparing modification time.
+func (c *Chunk) tryOptimized() (e error) {
+	files, e := filepath.Glob(filepath.Join(c.directory, "*.opm"))
+	if e != nil {
+		return
+	}
+	if len(files) < 1 {
+		return
+	}
+	for _, f := range files {
+		// compare opm file and original file
+		originFile := strings.TrimSuffix(f, ".opm")
+		fi, _ := os.Stat(f)
+		ofi, _ := os.Stat(originFile)
+		if fi == nil || ofi == nil {
+			continue
+		}
+
+		// if opm file is newer, replace to original file
+		if fi.ModTime().Sub(ofi.ModTime()) > 1 {
+			if e = os.RemoveAll(originFile); e != nil {
+				return
+			}
+			if e = os.Rename(f, originFile); e != nil {
+				return
+			}
+			if e = os.RemoveAll(f); e != nil {
+				return
+			}
+		}
 	}
 	return
 }
