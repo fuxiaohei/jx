@@ -184,6 +184,11 @@ func (p *PK) GetLastCursor() int {
 	return p.lastLoadCursor
 }
 
+// get current max auto increment int64.
+func (p *PK) GetAutoIncrement() int64 {
+	return p.autoId
+}
+
 // init pk data as first running.
 func (p *PK) firstInit() (e error) {
 	// first init

@@ -20,6 +20,12 @@ type Storage struct {
 	tables map[reflect.Type]*Table
 }
 
+// get struct table.
+// the struct must be synced.
+func (s *Storage) Table(v interface {})*Table{
+	return s.tables[getReflectType(v)]
+}
+
 // insert new struct value.
 // it must be synced struct.
 func (s *Storage) Insert(v interface{}) (e error) {
