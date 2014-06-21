@@ -26,6 +26,16 @@ func (s *Storage) Table(v interface{}) *Table {
 	return s.tables[getReflectType(v)]
 }
 
+// get all tables in storage.
+// the tables are followed by synced struct objects.
+func (s *Storage) Tables() map[string]*Table {
+	data := make(map[string]*Table)
+	for rt, tbl := range s.tables {
+		data[rt.String()] = tbl
+	}
+	return data
+}
+
 // insert new struct value.
 // it must be synced struct.
 func (s *Storage) Insert(v interface{}) (e error) {

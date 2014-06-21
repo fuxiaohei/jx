@@ -32,6 +32,11 @@ type PK struct {
 	lastLoadCursor int
 }
 
+// get pk directory.
+func (p *PK) GetDirectory() string {
+	return p.directory
+}
+
 // set pk value if auto increment,
 // check pk unique.
 func (p *PK) SetPk(v interface{}, field string) (pk interface{}, e error) {

@@ -29,6 +29,11 @@ type Chunk struct {
 	data     map[int]map[int64]interface{}
 }
 
+// get chunk directory.
+func (c *Chunk) GetDirectory()string{
+	return c.directory
+}
+
 // get current cursor.
 func (c *Chunk) GetCurrent() int {
 	return c.current
